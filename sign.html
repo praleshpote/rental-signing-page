@@ -1,236 +1,406 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Sign Agreement</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sign Agreement | Secure Signing</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
+    :root {
+      --primary: #2b56ff;
+      --primary-hover: #1e3bb3;
+      --bg-body: #f5f7fa;
+      --border: #e2e8f0;
+      --text-main: #1a202c;
+      --text-muted: #718096;
+      --success: #38a169;
+      --error: #e53e3e;
+    }
+
     body {
-      font-family: Arial;
-      max-width: 900px;
-      margin: 30px auto;
-      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior-y: contain;
+    }
+
+    .top-nav {
+      background: #ffffff;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 40px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      width: 20px;
+      height: 20px;
+      background: var(--primary);
+      border-radius: 4px;
+    }
+
+    .wrapper {
+      max-width: 960px;
+      margin: 20px auto;
+      padding: 0 15px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .card-body {
+      padding: 24px;
     }
 
     #pdfContainer {
-      border: 1px solid #ccc;
+      background: #f1f5f9;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      min-height: 300px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .pdf-mobile-fallback {
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    .input-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .required-mark {
+      color: var(--error);
+    }
+
+    input#signerName {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px; 
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-sizing: border-box;
       margin-bottom: 20px;
-      padding: 10px;
-      min-height: 80px;
+    }
+
+    .confirmation-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .confirmation-box input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .signature-wrapper {
+      background: #fffdf5;
+      border: 2px dashed #cbd5e0;
+      border-radius: 8px;
+      touch-action: none;
     }
 
     canvas {
-      border: 1px solid #333;
+      display: block;
       width: 100%;
       height: 200px;
       touch-action: none;
     }
 
-    button {
-      padding: 10px 14px;
-      margin-top: 10px;
+    .btn {
+      padding: 16px 24px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 8px;
       cursor: pointer;
+      border: none;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      width: auto;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+    }
+
+    .status-msg {
+      text-align: center;
+      padding: 60px 20px;
+    }
+
+    .status-icon {
+      width: 64px;
+      height: 64px;
+      background: #dcfce7;
+      color: var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin: 0 auto 24px auto;
+    }
+
+    @media (max-width: 640px) {
+      .top-nav { padding: 0 15px; }
+      .card-body { padding: 15px; }
+      .top-nav .step-indicator { display: none; }
     }
   </style>
 </head>
-
 <body>
 
-<h2>Rental Agreement</h2>
+<nav class="top-nav">
+  <div class="logo"><div class="logo-icon"></div> Agreement Sign</div>
+  <div class="step-indicator">ACTION REQUIRED</div>
+</nav>
 
-<div id="pdfContainer">Loading agreement...</div>
+<div class="wrapper">
+  <div class="card">
+    <div class="card-header"><h1 id="agreement-title">Review & Sign</h1></div>
+    <div class="card-body" id="main-content">
+      
+      <div id="pdfContainer">
+        <div style="padding: 40px; text-align: center;">Loading document...</div>
+      </div>
 
-<label>Full Name</label>
-<input id="signerName" style="width:100%; padding:10px;" />
+      <div class="form-section">
+        <label class="input-label">Full Name <span class="required-mark">*</span></label>
+        <input id="signerName" type="text" placeholder="Your legal name">
 
-<h3>Signature</h3>
-<canvas id="canvas" width="800" height="200"></canvas>
+        <label class="input-label">Your Signature <span class="required-mark">*</span></label>
+        <div class="signature-wrapper">
+          <canvas id="canvas"></canvas>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0 25px 0;">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Sign with finger or stylus</span>
+          <button class="btn btn-secondary" onclick="clearCanvas()">Clear</button>
+        </div>
 
-<br>
-<button onclick="clearCanvas()">Clear</button>
-<button onclick="submitSignature()">Submit Signature</button>
+        <label class="confirmation-box" for="confirmTerms">
+          <input type="checkbox" id="confirmTerms">
+          <span style="font-size: 0.9rem; color: #475569;">
+            I hereby confirm that the contents of this document are true and accurate, and that I agree to all the above-mentioned conditions. <span class="required-mark">*</span>
+          </span>
+        </label>
+
+        <button class="btn btn-primary" id="submitBtn" onclick="submitSignature()">Finish & Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY";
 
-const supabaseClient = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
-
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const token = new URLSearchParams(window.location.search).get("token");
 let requestId = null;
+let isCanvasEmpty = true;
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  canvas.width = canvas.offsetWidth * ratio;
+  canvas.height = canvas.offsetHeight * ratio;
+  ctx.scale(ratio, ratio);
+  clearCanvas();
+}
+
+window.addEventListener('resize', resizeCanvas);
+setTimeout(resizeCanvas, 100);
 
 async function loadAgreement() {
   const box = document.getElementById("pdfContainer");
+  if (!token) { box.innerHTML = "<div class='pdf-mobile-fallback'>Missing token.</div>"; return; }
 
-  if (!token) {
-    box.innerHTML = "<h3>Missing signing token</h3>";
-    return;
-  }
+  const { data, error } = await supabaseClient.from("signing_requests").select("*").eq("token", token).maybeSingle();
 
-  box.innerHTML = "Searching agreement...";
-
-  const { data, error } = await supabaseClient
-    .from("signing_requests")
-    .select("*")
-    .eq("token", token)
-    .maybeSingle();
-
-  if (error) {
-    box.innerHTML = "<h3>Supabase Error</h3><pre>" + JSON.stringify(error, null, 2) + "</pre>";
-    return;
-  }
-
-  if (!data) {
-    box.innerHTML = "<h3>Invalid link. No agreement found.</h3>";
-    return;
-  }
-
-  if (!data.agreement_pdf_base64) {
-    box.innerHTML = "<h3>No PDF found in database.</h3>";
-    return;
-  }
-
+  if (error || !data) { box.innerHTML = "<div class='pdf-mobile-fallback'>Error loading document.</div>"; return; }
   if (data.status === "signed") {
-    document.body.innerHTML = "<h2>This agreement is already signed.</h2>";
+    showSuccessState();
     return;
   }
 
   requestId = data.id;
   document.getElementById("signerName").value = data.tenant_name || "";
 
-  box.innerHTML = `
-    <embed
-      src="data:application/pdf;base64,${data.agreement_pdf_base64}"
-      width="100%"
-      height="600px"
-      type="application/pdf"
-    />
-  `;
+  const pdfData = `data:application/pdf;base64,${data.agreement_pdf_base64}`;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    box.innerHTML = `
+      <div class="pdf-mobile-fallback">
+        <p style="margin-bottom: 15px;">Document ready for review.</p>
+        <a href="${pdfData}" target="_blank" style="display:inline-block; padding: 12px 20px; background: #edf2f7; color: var(--primary); text-decoration: none; border-radius: 6px; font-weight: 600;">
+           Open PDF to Review
+        </a>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 15px;">Review the document above, then sign below.</p>
+      </div>
+    `;
+  } else {
+    box.innerHTML = `<embed src="${pdfData}" width="100%" height="500px" type="application/pdf" />`;
+  }
 }
 
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
 let drawing = false;
 
-function getPosition(e) {
+function getPos(e) {
   const rect = canvas.getBoundingClientRect();
-  const touch = e.touches && e.touches[0];
-
-  return {
-    x: (touch ? touch.clientX : e.clientX) - rect.left,
-    y: (touch ? touch.clientY : e.clientY) - rect.top
-  };
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
-function startDrawing(e) {
+function start(e) {
   drawing = true;
-  const pos = getPosition(e);
+  isCanvasEmpty = false;
+  const pos = getPos(e);
   ctx.beginPath();
-  ctx.moveTo(pos.x, pos.y);
-}
-
-function stopDrawing() {
-  drawing = false;
-  ctx.beginPath();
-}
-
-function draw(e) {
-  if (!drawing) return;
-
-  e.preventDefault();
-
-  const pos = getPosition(e);
-
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.lineCap = "round";
+  ctx.strokeStyle = "#000";
+  ctx.moveTo(pos.x, pos.y);
+  if(e.cancelable) e.preventDefault();
+}
+
+function move(e) {
+  if (!drawing) return;
+  const pos = getPos(e);
   ctx.lineTo(pos.x, pos.y);
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(pos.x, pos.y);
+  if(e.cancelable) e.preventDefault();
 }
 
-canvas.addEventListener("mousedown", startDrawing);
-canvas.addEventListener("mouseup", stopDrawing);
-canvas.addEventListener("mousemove", draw);
+function stop() { drawing = false; }
 
-canvas.addEventListener("touchstart", startDrawing);
-canvas.addEventListener("touchend", stopDrawing);
-canvas.addEventListener("touchmove", draw);
+canvas.addEventListener("mousedown", start);
+canvas.addEventListener("touchstart", start, { passive: false });
+window.addEventListener("mousemove", move);
+window.addEventListener("touchmove", move, { passive: false });
+window.addEventListener("mouseup", stop);
+window.addEventListener("touchend", stop);
 
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  isCanvasEmpty = true;
+}
+
+function showSuccessState() {
+  document.getElementById("main-content").innerHTML = `
+    <div class="status-msg">
+      <div class="status-icon">✓</div>
+      <h2 style="color: var(--text-main); margin-bottom: 8px;">Document Signed Successfully</h2>
+      <p style="color: var(--text-muted); line-height: 1.5; max-width: 400px; margin: 0 auto;">
+        The document has been securely processed and stored. A confirmation has been sent to all involved parties. 
+        <br><br>
+        You may now close this window safely.
+      </p>
+    </div>`;
 }
 
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
+  const checked = document.getElementById("confirmTerms").checked;
 
-  if (!name) {
-    alert("Enter your name.");
+  if (!name || isCanvasEmpty || !checked) {
+    alert("Please fill in your name, sign the document, and check the confirmation box.");
     return;
   }
 
-  if (!requestId) {
-    alert("Agreement not loaded.");
-    return;
-  }
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.innerText = "Processing Signature...";
 
-  const blob = await new Promise(resolve =>
-    canvas.toBlob(resolve, "image/png")
-  );
+  try {
+    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    const path = `${requestId}.png`;
 
-  const filePath = `${requestId}.png`;
+    const { error: upErr } = await supabaseClient.storage.from("signatures").upload(path, blob, { upsert: true });
+    if (upErr) throw upErr;
 
-  const upload = await supabaseClient.storage
-    .from("signatures")
-    .upload(filePath, blob, {
-      upsert: true,
-      contentType: "image/png"
-    });
-
-  if (upload.error) {
-    alert("Upload failed: " + upload.error.message);
-    return;
-  }
-
-  const { data: urlData } = supabaseClient.storage
-    .from("signatures")
-    .getPublicUrl(filePath);
-
-  const insertResult = await supabaseClient
-    .from("signatures")
-    .insert({
+    const { data: urlData } = supabaseClient.storage.from("signatures").getPublicUrl(path);
+    
+    await supabaseClient.from("signatures").insert({
       signing_request_id: requestId,
       signer_name: name,
       signature_image_url: urlData.publicUrl
     });
 
-  if (insertResult.error) {
-    alert("Signature save failed: " + insertResult.error.message);
-    return;
-  }
-
-  const updateResult = await supabaseClient
-    .from("signing_requests")
-    .update({
+    await supabaseClient.from("signing_requests").update({
       status: "signed",
       signed_at: new Date().toISOString()
-    })
-    .eq("id", requestId);
+    }).eq("id", requestId);
 
-  if (updateResult.error) {
-    alert("Status update failed: " + updateResult.error.message);
-    return;
+    showSuccessState();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) {
+    alert("Error: " + err.message);
+    btn.disabled = false;
+    btn.innerText = "Try Again";
   }
-
-  document.body.innerHTML = "<h2>Agreement signed successfully.</h2>";
 }
 
 loadAgreement();
 </script>
-
 </body>
 </html>
