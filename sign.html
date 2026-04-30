@@ -2,33 +2,13 @@
 <html>
 <head>
   <title>Sign Agreement</title>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
-    body {
-      font-family: Arial;
-      max-width: 900px;
-      margin: 30px auto;
-      padding: 20px;
-    }
-
-    #pdfContainer {
-      border: 1px solid #ccc;
-      margin-bottom: 20px;
-    }
-
-    canvas {
-      border: 1px solid #333;
-      width: 100%;
-      height: 200px;
-    }
-
-    button {
-      padding: 10px 14px;
-      margin-top: 10px;
-      cursor: pointer;
-    }
+    body { font-family: Arial; max-width: 900px; margin: 30px auto; padding: 20px; }
+    #pdfContainer { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; }
+    canvas { border: 1px solid #333; width: 100%; height: 200px; }
+    button { padding: 10px 14px; margin-top: 10px; cursor: pointer; }
+    pre { background:#f3f3f3; padding:12px; white-space:pre-wrap; }
   </style>
 </head>
 
@@ -49,23 +29,28 @@
 <button onclick="submitSignature()">Submit Signature</button>
 
 <script>
-const supabase = window.supabase.createClient(
-  "https://ynpiihwwzhcnfszpaaya.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY"
-);
+const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const token = new URLSearchParams(window.location.search).get("token");
-
 let requestId = null;
+
+function showError(title, detail) {
+  document.getElementById("pdfContainer").innerHTML =
+    `<h3>${title}</h3><pre>${detail}</pre>`;
+}
 
 async function loadAgreement() {
   try {
+    document.getElementById("pdfContainer").innerHTML =
+      "Token found: " + token + "<br>Searching Supabase...";
+
     if (!token) {
-      document.body.innerHTML = "<h2>Missing signing token.</h2>";
+      showError("Missing signing token", "No token found in URL.");
       return;
     }
-
-    document.getElementById("pdfContainer").innerHTML = "Searching agreement...";
 
     const { data, error } = await supabase
       .from("signing_requests")
@@ -74,13 +59,17 @@ async function loadAgreement() {
       .maybeSingle();
 
     if (error) {
-      console.error("Supabase error:", error);
-      document.body.innerHTML = `<h2>Supabase Error</h2><pre>${JSON.stringify(error, null, 2)}</pre>`;
+      showError("Supabase error", JSON.stringify(error, null, 2));
       return;
     }
 
     if (!data) {
-      document.body.innerHTML = "<h2>Invalid signing link. No matching token found.</h2>";
+      showError("No agreement found", "No row exists for this token.");
+      return;
+    }
+
+    if (!data.agreement_pdf_base64) {
+      showError("PDF missing", "agreement_pdf_base64 is empty in Supabase.");
       return;
     }
 
@@ -89,28 +78,25 @@ async function loadAgreement() {
       return;
     }
 
-    if (!data.agreement_pdf_base64) {
-      document.body.innerHTML = "<h2>Agreement PDF is missing in Supabase.</h2>";
-      return;
-    }
-
     requestId = data.id;
-
     document.getElementById("signerName").value = data.tenant_name || "";
 
     document.getElementById("pdfContainer").innerHTML = `
-      <embed src="data:application/pdf;base64,${data.agreement_pdf_base64}" width="100%" height="500px" />
+      <embed 
+        src="data:application/pdf;base64,${data.agreement_pdf_base64}" 
+        width="100%" 
+        height="600px" 
+        type="application/pdf"
+      />
     `;
 
   } catch (err) {
-    console.error("Load agreement failed:", err);
-    document.body.innerHTML = `<h2>Page Error</h2><pre>${err.message}</pre>`;
+    showError("JavaScript page error", err.message);
   }
 }
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-
 let drawing = false;
 
 canvas.addEventListener("mousedown", () => drawing = true);
@@ -118,18 +104,14 @@ canvas.addEventListener("mouseup", () => {
   drawing = false;
   ctx.beginPath();
 });
-
 canvas.addEventListener("mousemove", draw);
 
 function draw(e) {
   if (!drawing) return;
-
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
-
   ctx.lineTo(e.offsetX, e.offsetY);
   ctx.stroke();
-
   ctx.beginPath();
   ctx.moveTo(e.offsetX, e.offsetY);
 }
@@ -142,17 +124,16 @@ async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
 
   if (!name) {
-    alert("Enter your name");
+    alert("Enter your name.");
     return;
   }
 
   if (!requestId) {
-    alert("Agreement not loaded");
+    alert("Agreement not loaded.");
     return;
   }
 
   const blob = await new Promise(resolve => canvas.toBlob(resolve));
-
   const filePath = `${requestId}.png`;
 
   const upload = await supabase.storage
@@ -160,8 +141,7 @@ async function submitSignature() {
     .upload(filePath, blob, { upsert: true });
 
   if (upload.error) {
-    alert("Upload failed");
-    console.error(upload.error);
+    alert("Upload failed: " + upload.error.message);
     return;
   }
 
@@ -179,7 +159,7 @@ async function submitSignature() {
     .from("signing_requests")
     .update({
       status: "signed",
-      signed_at: new Date()
+      signed_at: new Date().toISOString()
     })
     .eq("id", requestId);
 
