@@ -51,10 +51,10 @@
 
 <script>
 alert("SIGN PAGE JS IS RUNNING");
-const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabase.co";
+const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabaseClient.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY";
 
-const supabase = window.supabase.createClient(
+const supabaseClient = window.supabaseClient.createClient(
   SUPABASE_URL,
   SUPABASE_ANON_KEY
 );
@@ -162,7 +162,7 @@ async function submitSignature() {
 
   const filePath = `${requestId}.png`;
 
-  const upload = await supabase.storage
+  const upload = await supabaseClient.storage
     .from("signatures")
     .upload(filePath, blob, { upsert: true });
 
@@ -171,11 +171,11 @@ async function submitSignature() {
     return;
   }
 
-  const { data: urlData } = supabase.storage
+  const { data: urlData } = supabaseClient.storage
     .from("signatures")
     .getPublicUrl(filePath);
 
-  await supabase.from("signatures").insert({
+  await supabaseClient.from("signatures").insert({
     signing_request_id: requestId,
     signer_name: name,
     signature_image_url: urlData.publicUrl
