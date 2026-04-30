@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Sign Agreement | Secure Signing</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
 
   <style>
     :root {
@@ -358,6 +359,76 @@ function showSuccessState() {
     </div>`;
 }
 
+  function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
+function uint8ArrayToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+
+  return btoa(binary);
+}
+
+async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName) {
+  const pdfBytes = base64ToUint8Array(originalPdfBase64);
+  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
+  const pages = pdfDoc.getPages();
+  const lastPage = pages[pages.length - 1];
+
+  const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
+  const signatureImage = await pdfDoc.embedPng(pngImageBytes);
+
+  const pageWidth = lastPage.getWidth();
+
+  const signatureWidth = 180;
+  const signatureHeight = 60;
+
+  const x = pageWidth - signatureWidth - 70;
+  const y = 95;
+
+  lastPage.drawText("Digitally Signed By:", {
+    x,
+    y: y + 82,
+    size: 9
+  });
+
+  lastPage.drawImage(signatureImage, {
+    x,
+    y: y + 18,
+    width: signatureWidth,
+    height: signatureHeight
+  });
+
+  lastPage.drawText(signerName, {
+    x,
+    y,
+    size: 10
+  });
+
+  lastPage.drawText("Signed At: " + new Date().toLocaleString(), {
+    x,
+    y: y - 14,
+    size: 8
+  });
+
+  const signedBytes = await pdfDoc.save();
+  return uint8ArrayToBase64(signedBytes);
+}
+  
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
@@ -372,27 +443,58 @@ async function submitSignature() {
   btn.innerText = "Processing Signature...";
 
   try {
+    const { data: requestData, error: requestError } = await supabaseClient
+      .from("signing_requests")
+      .select("*")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    if (requestError || !requestData) {
+      throw new Error("Could not reload agreement data.");
+    }
+
+    const signatureDataUrl = canvas.toDataURL("image/png");
+
     const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
     const path = `${requestId}.png`;
 
-    const { error: upErr } = await supabaseClient.storage.from("signatures").upload(path, blob, { upsert: true });
+    const { error: upErr } = await supabaseClient.storage
+      .from("signatures")
+      .upload(path, blob, { upsert: true, contentType: "image/png" });
+
     if (upErr) throw upErr;
 
-    const { data: urlData } = supabaseClient.storage.from("signatures").getPublicUrl(path);
-    
+    const { data: urlData } = supabaseClient.storage
+      .from("signatures")
+      .getPublicUrl(path);
+
     await supabaseClient.from("signatures").insert({
       signing_request_id: requestId,
       signer_name: name,
       signature_image_url: urlData.publicUrl
     });
 
+    const signedPdfBase64 = await createSignedPdfBase64(
+      requestData.agreement_pdf_base64,
+      signatureDataUrl,
+      name
+    );
+
+    const signedFileName =
+      requestData.agreement_file_name
+        ? "signed_" + requestData.agreement_file_name
+        : "signed_agreement.pdf";
+
     await supabaseClient.from("signing_requests").update({
       status: "signed",
-      signed_at: new Date().toISOString()
+      signed_at: new Date().toISOString(),
+      signed_pdf_base64: signedPdfBase64,
+      signed_file_name: signedFileName
     }).eq("id", requestId);
 
     showSuccessState();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
   } catch (err) {
     alert("Error: " + err.message);
     btn.disabled = false;
