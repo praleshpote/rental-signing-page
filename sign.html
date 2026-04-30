@@ -59,34 +59,53 @@ const token = new URLSearchParams(window.location.search).get("token");
 let requestId = null;
 
 async function loadAgreement() {
-  if (!token) {
-    document.body.innerHTML = "<h2>Missing signing token.</h2>";
-    return;
+  try {
+    if (!token) {
+      document.body.innerHTML = "<h2>Missing signing token.</h2>";
+      return;
+    }
+
+    document.getElementById("pdfContainer").innerHTML = "Searching agreement...";
+
+    const { data, error } = await supabase
+      .from("signing_requests")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Supabase error:", error);
+      document.body.innerHTML = `<h2>Supabase Error</h2><pre>${JSON.stringify(error, null, 2)}</pre>`;
+      return;
+    }
+
+    if (!data) {
+      document.body.innerHTML = "<h2>Invalid signing link. No matching token found.</h2>";
+      return;
+    }
+
+    if (data.status === "signed") {
+      document.body.innerHTML = "<h2>This agreement is already signed.</h2>";
+      return;
+    }
+
+    if (!data.agreement_pdf_base64) {
+      document.body.innerHTML = "<h2>Agreement PDF is missing in Supabase.</h2>";
+      return;
+    }
+
+    requestId = data.id;
+
+    document.getElementById("signerName").value = data.tenant_name || "";
+
+    document.getElementById("pdfContainer").innerHTML = `
+      <embed src="data:application/pdf;base64,${data.agreement_pdf_base64}" width="100%" height="500px" />
+    `;
+
+  } catch (err) {
+    console.error("Load agreement failed:", err);
+    document.body.innerHTML = `<h2>Page Error</h2><pre>${err.message}</pre>`;
   }
-
-  const { data, error } = await supabase
-    .from("signing_requests")
-    .select("*")
-    .eq("token", token)
-    .single();
-
-  if (error || !data) {
-    document.body.innerHTML = "<h2>Invalid signing link.</h2>";
-    return;
-  }
-
-  if (data.status === "signed") {
-    document.body.innerHTML = "<h2>This agreement is already signed.</h2>";
-    return;
-  }
-
-  requestId = data.id;
-
-  document.getElementById("signerName").value = data.tenant_name || "";
-
-  document.getElementById("pdfContainer").innerHTML = `
-    <embed src="data:application/pdf;base64,${data.agreement_pdf_base64}" width="100%" height="500px" />
-  `;
 }
 
 const canvas = document.getElementById("canvas");
