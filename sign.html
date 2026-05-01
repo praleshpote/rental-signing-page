@@ -1011,6 +1011,98 @@ async function createTypedSignatureImage(signerName) {
   return { bytes, blob };
 }
 
+async function cropSignatureImageBytes(inputBytes, padding = 22) {
+  return await new Promise((resolve) => {
+    const blob = new Blob([inputBytes], { type: "image/png" });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+
+    img.onload = async function () {
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = img.naturalWidth || img.width;
+      sourceCanvas.height = img.naturalHeight || img.height;
+
+      const sourceCtx = sourceCanvas.getContext("2d");
+      sourceCtx.drawImage(img, 0, 0);
+
+      const imageData = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const data = imageData.data;
+
+      let minX = sourceCanvas.width;
+      let minY = sourceCanvas.height;
+      let maxX = 0;
+      let maxY = 0;
+      let found = false;
+
+      for (let y = 0; y < sourceCanvas.height; y++) {
+        for (let x = 0; x < sourceCanvas.width; x++) {
+          const i = (y * sourceCanvas.width + x) * 4;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const a = data[i + 3];
+
+          // Detect black/dark signature ink on either transparent or white background.
+          const isInk = a > 20 && (r + g + b) / 3 < 245;
+
+          if (isInk) {
+            found = true;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+
+      if (!found) {
+        URL.revokeObjectURL(url);
+        resolve(inputBytes);
+        return;
+      }
+
+      minX = Math.max(0, minX - padding);
+      minY = Math.max(0, minY - padding);
+      maxX = Math.min(sourceCanvas.width, maxX + padding);
+      maxY = Math.min(sourceCanvas.height, maxY + padding);
+
+      const cropWidth = maxX - minX;
+      const cropHeight = maxY - minY;
+
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = cropWidth;
+      cropCanvas.height = cropHeight;
+
+      const cropCtx = cropCanvas.getContext("2d");
+      cropCtx.clearRect(0, 0, cropWidth, cropHeight);
+      cropCtx.drawImage(
+        sourceCanvas,
+        minX,
+        minY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        cropWidth,
+        cropHeight
+      );
+
+      const croppedBlob = await new Promise(resolveBlob => cropCanvas.toBlob(resolveBlob, "image/png"));
+      const croppedBytes = await fetch(cropCanvas.toDataURL("image/png")).then(res => res.arrayBuffer());
+
+      URL.revokeObjectURL(url);
+      resolve({ bytes: croppedBytes, blob: croppedBlob });
+    };
+
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      resolve(inputBytes);
+    };
+
+    img.src = url;
+  });
+}
+
 async function getSignatureData(role) {
   if (role === "owner") {
     const imageResponse = await fetch(OWNER_SIGNATURE_IMAGE);
@@ -1019,9 +1111,11 @@ async function getSignatureData(role) {
     }
 
     const ownerSignatureBytes = await imageResponse.arrayBuffer();
+    const croppedOwnerSignature = await cropSignatureImageBytes(ownerSignatureBytes, 18);
+
     return {
-      bytes: ownerSignatureBytes,
-      blob: new Blob([ownerSignatureBytes], { type: "image/png" })
+      bytes: croppedOwnerSignature.bytes,
+      blob: croppedOwnerSignature.blob
     };
   }
 
@@ -1029,16 +1123,18 @@ async function getSignatureData(role) {
   const signerName = document.getElementById("signerName").value.trim();
 
   if (useTypedSignature) {
-    return await createTypedSignatureImage(signerName);
+    const typedSignature = await createTypedSignatureImage(signerName);
+    return await cropSignatureImageBytes(typedSignature.bytes, 8);
   }
 
   const signatureDataUrl = canvas.toDataURL("image/png");
   const tenantBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
   const tenantBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
+  const croppedTenantSignature = await cropSignatureImageBytes(tenantBytes, 12);
 
   return {
-    bytes: tenantBytes,
-    blob: tenantBlob
+    bytes: croppedTenantSignature.bytes,
+    blob: croppedTenantSignature.blob || tenantBlob
   };
 }
 
@@ -1064,7 +1160,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
       const page = pages[1];
       const tenantCenterX = 410;
 
-      drawCenteredImage(page, signatureImage, tenantCenterX, 132, 105, 42);
+      drawCenteredImageByWidth(page, signatureImage, tenantCenterX, 130, 190);
       drawCenteredText(page, "Digitally Signed", tenantCenterX, 103, 8);
       drawCenteredText(page, signedDate, tenantCenterX, 87, 8);
     }
@@ -1083,7 +1179,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
       const page = pages[1];
       const ownerCenterX = 134;
 
-      drawCenteredImageByWidth(page, signatureImage, ownerCenterX, 126, 120);
+      drawCenteredImageByWidth(page, signatureImage, ownerCenterX, 132, 155);
       drawCenteredText(page, "Digitally Signed", ownerCenterX, 103, 8);
       drawCenteredText(page, signedDate, ownerCenterX, 87, 8);
     }
