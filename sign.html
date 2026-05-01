@@ -180,15 +180,16 @@
       max-width: 850px;
       max-height: 75vh;
       -webkit-overflow-scrolling: touch;
-      touch-action: pan-x pan-y pinch-zoom;
+      touch-action: none;
     }
 
     .pdf-page-wrapper canvas {
       width: 100%;
       height: auto;
       display: block;
-      touch-action: pan-x pan-y pinch-zoom;
+      touch-action: none;
       transform-origin: top left;
+      will-change: transform;
     }
 
     .input-label {
@@ -469,6 +470,9 @@ let isCanvasEmpty = true;
 let pdfDocGlobal = null;
 let currentPdfPage = 1;
 let totalPdfPages = 0;
+let pdfZoomScale = 1;
+let pinchStartDistance = 0;
+let pinchStartScale = 1;
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -663,7 +667,7 @@ async function renderPdfPage(pageNum) {
   pageCanvas.style.height = `${Math.floor(viewport.height)}px`;
   pageCanvas.style.maxWidth = "100%";
   pageCanvas.style.height = "auto";
-  // Native phone pinch-zoom is enabled through touch-action CSS.
+  setupPdfPinchZoom(pageWrapper, pageCanvas);
 
   pageWrapper.appendChild(pageCanvas);
 
@@ -673,7 +677,7 @@ async function renderPdfPage(pageNum) {
       <div class="pdf-page-count">Page ${pageNum} of ${totalPdfPages}</div>
       <button class="pdf-nav-btn" onclick="changePdfPage(1)" ${pageNum >= totalPdfPages ? "disabled" : ""}>›</button>
     </div>
-    <div class="pdf-zoom-hint">Use two fingers to pinch zoom in/out</div>
+    <div class="pdf-zoom-hint">Use two fingers to pinch zoom in/out. Double tap to reset.</div>
   `;
 
   pdfPages.appendChild(pageWrapper);
@@ -690,7 +694,59 @@ function changePdfPage(direction) {
   if (nextPage < 1 || nextPage > totalPdfPages) return;
 
   currentPdfPage = nextPage;
+  pdfZoomScale = 1;
   renderPdfPage(currentPdfPage);
+}
+
+function getTouchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function setupPdfPinchZoom(wrapper, canvasEl) {
+  pdfZoomScale = 1;
+  pinchStartDistance = 0;
+  pinchStartScale = 1;
+
+  function applyZoom(scale) {
+    pdfZoomScale = Math.max(1, Math.min(scale, 4));
+    canvasEl.style.transform = `scale(${pdfZoomScale})`;
+
+    if (pdfZoomScale === 1) {
+      canvasEl.style.width = "100%";
+      wrapper.scrollLeft = 0;
+      wrapper.scrollTop = 0;
+    }
+  }
+
+  wrapper.addEventListener("touchstart", function (e) {
+    if (e.touches.length === 2) {
+      pinchStartDistance = getTouchDistance(e.touches);
+      pinchStartScale = pdfZoomScale;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  wrapper.addEventListener("touchmove", function (e) {
+    if (e.touches.length === 2 && pinchStartDistance > 0) {
+      const currentDistance = getTouchDistance(e.touches);
+      const nextScale = pinchStartScale * (currentDistance / pinchStartDistance);
+      applyZoom(nextScale);
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  wrapper.addEventListener("touchend", function (e) {
+    if (e.touches.length < 2) {
+      pinchStartDistance = 0;
+      pinchStartScale = pdfZoomScale;
+    }
+  }, { passive: false });
+
+  wrapper.addEventListener("dblclick", function () {
+    applyZoom(1);
+  });
 }
 
 let drawing = false;
