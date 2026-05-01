@@ -966,7 +966,7 @@ function drawCenteredImageByWidth(page, image, centerX, y, targetWidth) {
   });
 }
 
-function drawSignatureAutoFit(page, image, centerX, lineY, maxWidth, maxHeight, gapAboveLine = 8) {
+function drawSignatureAutoFit(page, image, centerX, lineY, maxWidth, maxHeight) {
   const originalWidth = image.width;
   const originalHeight = image.height;
 
@@ -976,7 +976,9 @@ function drawSignatureAutoFit(page, image, centerX, lineY, maxWidth, maxHeight, 
 
   const finalWidth = originalWidth * scale;
   const finalHeight = originalHeight * scale;
-  const yPosition = lineY + gapAboveLine;
+
+  // 👇 KEY FIX: bottom of signature sits ON the line
+  const yPosition = lineY;
 
   page.drawImage(image, {
     x: centerX - finalWidth / 2,
