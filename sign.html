@@ -428,6 +428,74 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
   const signedBytes = await pdfDoc.save();
   return uint8ArrayToBase64(signedBytes);
 }
+
+  async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName) {
+  const pdfBytes = base64ToUint8Array(originalPdfBase64);
+  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
+  const pages = pdfDoc.getPages();
+
+  const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
+  const signatureImage = await pdfDoc.embedPng(pngImageBytes);
+
+  // ---------- PAGE 1: Tenant Initials ----------
+  if (pages[0]) {
+    const page = pages[0];
+    const w = page.getWidth();
+
+    page.drawImage(signatureImage, {
+      x: w / 2 + 40,
+      y: 45,
+      width: 90,
+      height: 32
+    });
+  }
+
+  // ---------- PAGE 2: Tenant Signature ----------
+  if (pages[1]) {
+    const page = pages[1];
+    const w = page.getWidth();
+
+    const x = w - 245;
+
+    page.drawImage(signatureImage, {
+      x,
+      y: 180,
+      width: 170,
+      height: 55
+    });
+
+    page.drawText(signerName, {
+      x,
+      y: 165,
+      size: 9
+    });
+
+    page.drawText("Signed: " + new Date().toLocaleDateString(), {
+      x,
+      y: 152,
+      size: 8
+    });
+  }
+
+  // ---------- LAST PAGE (Declaration): Tenant Initials ----------
+  const lastIndex = pages.length - 1;
+
+  if (pages[lastIndex]) {
+    const page = pages[lastIndex];
+    const w = page.getWidth();
+
+    page.drawImage(signatureImage, {
+      x: w / 2 + 40,
+      y: 60,
+      width: 90,
+      height: 32
+    });
+  }
+
+  const signedBytes = await pdfDoc.save();
+  return uint8ArrayToBase64(signedBytes);
+}
   
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
