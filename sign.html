@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Sign Agreement | Secure Signing</title>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
 
@@ -20,13 +21,11 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       background-color: var(--bg-body);
       color: var(--text-main);
       margin: 0;
       padding: 0;
-      -webkit-font-smoothing: antialiased;
-      overscroll-behavior-y: contain;
     }
 
     .top-nav {
@@ -118,7 +117,7 @@
     input#signerName {
       width: 100%;
       padding: 14px;
-      font-size: 16px; 
+      font-size: 16px;
       border: 1px solid var(--border);
       border-radius: 8px;
       box-sizing: border-box;
@@ -171,6 +170,11 @@
       color: white;
     }
 
+    .btn-primary:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
     .btn-secondary {
       background: #f1f5f9;
       color: #475569;
@@ -204,18 +208,25 @@
     }
   </style>
 </head>
+
 <body>
 
 <nav class="top-nav">
-  <div class="logo"><div class="logo-icon"></div> Agreement Sign</div>
-  <div class="step-indicator">ACTION REQUIRED</div>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    Agreement Sign
+  </div>
+  <div class="step-indicator" id="stepIndicator">ACTION REQUIRED</div>
 </nav>
 
 <div class="wrapper">
   <div class="card">
-    <div class="card-header"><h1 id="agreement-title">Review & Sign</h1></div>
+    <div class="card-header">
+      <h1 id="agreement-title">Review & Sign</h1>
+    </div>
+
     <div class="card-body" id="main-content">
-      
+
       <div id="pdfContainer">
         <div style="padding: 40px; text-align: center;">Loading document...</div>
       </div>
@@ -228,21 +239,23 @@
         <div class="signature-wrapper">
           <canvas id="canvas"></canvas>
         </div>
-        
+
         <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0 25px 0;">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Sign with finger or stylus</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Sign with finger, mouse, or stylus</span>
           <button class="btn btn-secondary" onclick="clearCanvas()">Clear</button>
         </div>
 
         <label class="confirmation-box" for="confirmTerms">
           <input type="checkbox" id="confirmTerms">
           <span style="font-size: 0.9rem; color: #475569;">
-            I hereby confirm that the contents of this document are true and accurate, and that I agree to all the above-mentioned conditions. <span class="required-mark">*</span>
+            I hereby confirm that I have reviewed this agreement and voluntarily agree to sign it electronically.
+            <span class="required-mark">*</span>
           </span>
         </label>
 
         <button class="btn btn-primary" id="submitBtn" onclick="submitSignature()">Finish & Submit</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -252,8 +265,12 @@ const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const token = new URLSearchParams(window.location.search).get("token");
+
 let requestId = null;
+let requestDataGlobal = null;
+let signerRole = "tenant";
 let isCanvasEmpty = true;
 
 const canvas = document.getElementById("canvas");
@@ -263,29 +280,75 @@ function resizeCanvas() {
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   canvas.width = canvas.offsetWidth * ratio;
   canvas.height = canvas.offsetHeight * ratio;
-  ctx.scale(ratio, ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   clearCanvas();
 }
 
-window.addEventListener('resize', resizeCanvas);
+window.addEventListener("resize", resizeCanvas);
 setTimeout(resizeCanvas, 100);
 
 async function loadAgreement() {
   const box = document.getElementById("pdfContainer");
-  if (!token) { box.innerHTML = "<div class='pdf-mobile-fallback'>Missing token.</div>"; return; }
 
-  const { data, error } = await supabaseClient.from("signing_requests").select("*").eq("token", token).maybeSingle();
-
-  if (error || !data) { box.innerHTML = "<div class='pdf-mobile-fallback'>Error loading document.</div>"; return; }
-  if (data.status === "signed") {
-    showSuccessState();
+  if (!token) {
+    box.innerHTML = "<div class='pdf-mobile-fallback'>Missing signing token.</div>";
     return;
   }
 
-  requestId = data.id;
-  document.getElementById("signerName").value = data.tenant_name || "";
+  const { data, error } = await supabaseClient
+    .from("signing_requests")
+    .select("*")
+    .or(`token.eq.${token},owner_token.eq.${token}`)
+    .maybeSingle();
 
-  const pdfData = `data:application/pdf;base64,${data.agreement_pdf_base64}`;
+  if (error || !data) {
+    box.innerHTML = "<div class='pdf-mobile-fallback'>Error loading document.</div>";
+    return;
+  }
+
+  requestDataGlobal = data;
+  requestId = data.id;
+
+  if (data.owner_token && token === data.owner_token) {
+    signerRole = "owner";
+  } else {
+    signerRole = "tenant";
+  }
+
+  if (data.status === "completed") {
+    showAlreadyCompletedState();
+    return;
+  }
+
+  if (signerRole === "tenant" && data.status !== "tenant_pending") {
+    showAlreadySignedState("Tenant signature has already been completed. Waiting for owner signature.");
+    return;
+  }
+
+  if (signerRole === "owner" && data.status !== "owner_pending") {
+    showAlreadySignedState("Owner signature is not available yet.");
+    return;
+  }
+
+  if (signerRole === "tenant") {
+    document.getElementById("agreement-title").innerText = "Tenant Review & Sign";
+    document.getElementById("stepIndicator").innerText = "TENANT SIGNATURE REQUIRED";
+    document.getElementById("signerName").value = data.tenant_name || "";
+  } else {
+    document.getElementById("agreement-title").innerText = "Owner Review & Sign";
+    document.getElementById("stepIndicator").innerText = "OWNER SIGNATURE REQUIRED";
+    document.getElementById("signerName").value = data.owner_name || "";
+  }
+
+  let pdfBase64 = "";
+
+  if (signerRole === "owner") {
+    pdfBase64 = data.tenant_signed_pdf_base64 || data.signed_pdf_base64 || data.agreement_pdf_base64;
+  } else {
+    pdfBase64 = data.agreement_pdf_base64;
+  }
+
+  const pdfData = `data:application/pdf;base64,${pdfBase64}`;
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   if (isMobile) {
@@ -293,7 +356,7 @@ async function loadAgreement() {
       <div class="pdf-mobile-fallback">
         <p style="margin-bottom: 15px;">Document ready for review.</p>
         <a href="${pdfData}" target="_blank" style="display:inline-block; padding: 12px 20px; background: #edf2f7; color: var(--primary); text-decoration: none; border-radius: 6px; font-weight: 600;">
-           Open PDF to Review
+          Open PDF to Review
         </a>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 15px;">Review the document above, then sign below.</p>
       </div>
@@ -309,30 +372,40 @@ function getPos(e) {
   const rect = canvas.getBoundingClientRect();
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-  return { x: clientX - rect.left, y: clientY - rect.top };
+
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  };
 }
 
 function start(e) {
   drawing = true;
   isCanvasEmpty = false;
+
   const pos = getPos(e);
   ctx.beginPath();
   ctx.lineWidth = 2.5;
   ctx.lineCap = "round";
   ctx.strokeStyle = "#000";
   ctx.moveTo(pos.x, pos.y);
-  if(e.cancelable) e.preventDefault();
+
+  if (e.cancelable) e.preventDefault();
 }
 
 function move(e) {
   if (!drawing) return;
+
   const pos = getPos(e);
   ctx.lineTo(pos.x, pos.y);
   ctx.stroke();
-  if(e.cancelable) e.preventDefault();
+
+  if (e.cancelable) e.preventDefault();
 }
 
-function stop() { drawing = false; }
+function stop() {
+  drawing = false;
+}
 
 canvas.addEventListener("mousedown", start);
 canvas.addEventListener("touchstart", start, { passive: false });
@@ -346,20 +419,53 @@ function clearCanvas() {
   isCanvasEmpty = true;
 }
 
-function showSuccessState() {
+function showTenantSuccessState() {
   document.getElementById("main-content").innerHTML = `
     <div class="status-msg">
       <div class="status-icon">✓</div>
-      <h2 style="color: var(--text-main); margin-bottom: 8px;">Document Signed Successfully</h2>
-      <p style="color: var(--text-muted); line-height: 1.5; max-width: 400px; margin: 0 auto;">
-        The document has been securely processed and stored. A confirmation has been sent to all involved parties. 
-        <br><br>
-        You may now close this window safely.
+      <h2>Tenant Signature Submitted</h2>
+      <p style="color: var(--text-muted); line-height: 1.5; max-width: 460px; margin: 0 auto;">
+        Thank you. The agreement has been signed by the tenant and will now be sent to the owner for final signature.
+        <br><br>You may close this window safely.
       </p>
     </div>`;
 }
 
-  function base64ToUint8Array(base64) {
+function showOwnerSuccessState() {
+  document.getElementById("main-content").innerHTML = `
+    <div class="status-msg">
+      <div class="status-icon">✓</div>
+      <h2>Agreement Fully Signed</h2>
+      <p style="color: var(--text-muted); line-height: 1.5; max-width: 460px; margin: 0 auto;">
+        The agreement has now been signed by both parties. A final copy may be sent to both owner and tenant.
+        <br><br>You may close this window safely.
+      </p>
+    </div>`;
+}
+
+function showAlreadyCompletedState() {
+  document.getElementById("main-content").innerHTML = `
+    <div class="status-msg">
+      <div class="status-icon">✓</div>
+      <h2>Agreement Already Completed</h2>
+      <p style="color: var(--text-muted); line-height: 1.5; max-width: 460px; margin: 0 auto;">
+        This agreement has already been signed by both parties.
+      </p>
+    </div>`;
+}
+
+function showAlreadySignedState(message) {
+  document.getElementById("main-content").innerHTML = `
+    <div class="status-msg">
+      <div class="status-icon">✓</div>
+      <h2>No Further Action Needed</h2>
+      <p style="color: var(--text-muted); line-height: 1.5; max-width: 460px; margin: 0 auto;">
+        ${message}
+      </p>
+    </div>`;
+}
+
+function base64ToUint8Array(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
 
@@ -381,7 +487,8 @@ function uint8ArrayToBase64(bytes) {
 
   return btoa(binary);
 }
- function getInitialsFromName(fullName) {
+
+function getInitialsFromName(fullName) {
   const parts = String(fullName || "")
     .trim()
     .split(/\s+/)
@@ -395,7 +502,7 @@ function uint8ArrayToBase64(bytes) {
   return `${first}.${last}.`.toUpperCase();
 }
 
-async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName) {
+async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
@@ -406,68 +513,112 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
   const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
   const signatureImage = await pdfDoc.embedPng(pngImageBytes);
 
-  // PAGE 1 — Tenant Signature line, centered on underline
-  if (pages[0]) {
-    const page = pages[0];
+  if (role === "tenant") {
+    // PAGE 1 — Tenant initials/signature area
+    if (pages[0]) {
+      const page = pages[0];
 
-    page.drawText(initials, {
-      x: 508,
-      y: 60,
-      size: 9
-    });
+      page.drawText(initials, {
+        x: 508,
+        y: 60,
+        size: 9
+      });
 
-    page.drawText("Digitally Signed", {
-      x: 512,
-      y: 68,
-      size: 7
-    });
-  }
+      page.drawText("Digitally Signed", {
+        x: 512,
+        y: 68,
+        size: 7
+      });
+    }
 
-  // PAGE 2 — Signature above tenant name line, date centered on date line
-  if (pages[1]) {
-    const page = pages[1];
+    // PAGE 2 — Tenant signature above tenant name line
+    if (pages[1]) {
+      const page = pages[1];
 
-    page.drawImage(signatureImage, {
-      x: 358,
-      y: 132,
-      width: 105,
-      height: 42
-    });
+      page.drawImage(signatureImage, {
+        x: 358,
+        y: 132,
+        width: 105,
+        height: 42
+      });
 
-    page.drawText("Digitally Signed", {
-      x: 390,
-      y: 103,
-      size: 8
-    });
+      page.drawText("Digitally Signed", {
+        x: 390,
+        y: 103,
+        size: 8
+      });
 
-    page.drawText(signedDate, {
-      x: 394,
-      y: 87,
-      size: 8
-    });
-  }
+      page.drawText(signedDate, {
+        x: 394,
+        y: 87,
+        size: 8
+      });
+    }
 
-  // PAGE 3 — Declaration Tenant Signature line, same style as page 1
-  const lastPage = pages[pages.length - 1];
+    // PAGE 3 — Declaration tenant signature
+    const lastPage = pages[pages.length - 1];
 
-  if (lastPage) {
-    lastPage.drawText(initials, {
-      x: 140,
-      y: 310,
-      size: 9
-    });
+    if (lastPage) {
+      lastPage.drawText(initials, {
+        x: 140,
+        y: 310,
+        size: 9
+      });
 
-    lastPage.drawText("Digitally Signed", {
-      x: 124,
-      y: 298,
-      size: 8
-    });
+      lastPage.drawText("Digitally Signed", {
+        x: 124,
+        y: 298,
+        size: 8
+      });
+    }
+
+  } else {
+    // OWNER SIGNATURE — Page 2 owner signature line
+    if (pages[1]) {
+      const page = pages[1];
+
+      page.drawImage(signatureImage, {
+        x: 82,
+        y: 132,
+        width: 105,
+        height: 42
+      });
+
+      page.drawText("Digitally Signed", {
+        x: 112,
+        y: 103,
+        size: 8
+      });
+
+      page.drawText(signedDate, {
+        x: 116,
+        y: 87,
+        size: 8
+      });
+    }
+
+    // Optional owner initials on Page 1
+    if (pages[0]) {
+      const page = pages[0];
+
+      page.drawText(initials, {
+        x: 160,
+        y: 60,
+        size: 9
+      });
+
+      page.drawText("Digitally Signed", {
+        x: 140,
+        y: 68,
+        size: 7
+      });
+    }
   }
 
   const signedBytes = await pdfDoc.save();
   return uint8ArrayToBase64(signedBytes);
 }
-  
+
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
@@ -495,28 +646,44 @@ async function submitSignature() {
     const signatureDataUrl = canvas.toDataURL("image/png");
 
     const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
-    const path = `${requestId}.png`;
+    const signaturePath = `${requestId}_${signerRole}_${Date.now()}.png`;
 
     const { error: upErr } = await supabaseClient.storage
       .from("signatures")
-      .upload(path, blob, { upsert: true, contentType: "image/png" });
+      .upload(signaturePath, blob, {
+        upsert: true,
+        contentType: "image/png"
+      });
 
     if (upErr) throw upErr;
 
     const { data: urlData } = supabaseClient.storage
       .from("signatures")
-      .getPublicUrl(path);
+      .getPublicUrl(signaturePath);
 
     await supabaseClient.from("signatures").insert({
       signing_request_id: requestId,
       signer_name: name,
+      signer_role: signerRole,
       signature_image_url: urlData.publicUrl
     });
 
+    let sourcePdfBase64 = "";
+
+    if (signerRole === "tenant") {
+      sourcePdfBase64 = requestData.agreement_pdf_base64;
+    } else {
+      sourcePdfBase64 =
+        requestData.tenant_signed_pdf_base64 ||
+        requestData.signed_pdf_base64 ||
+        requestData.agreement_pdf_base64;
+    }
+
     const signedPdfBase64 = await createSignedPdfBase64(
-      requestData.agreement_pdf_base64,
+      sourcePdfBase64,
       signatureDataUrl,
-      name
+      name,
+      signerRole
     );
 
     const signedFileName =
@@ -524,14 +691,40 @@ async function submitSignature() {
         ? "signed_" + requestData.agreement_file_name
         : "signed_agreement.pdf";
 
-    await supabaseClient.from("signing_requests").update({
-      status: "signed",
-      signed_at: new Date().toISOString(),
-      signed_pdf_base64: signedPdfBase64,
-      signed_file_name: signedFileName
-    }).eq("id", requestId);
+    if (signerRole === "tenant") {
+      const { error: updateError } = await supabaseClient
+        .from("signing_requests")
+        .update({
+          status: "owner_pending",
+          tenant_signed_at: new Date().toISOString(),
+          tenant_signed_pdf_base64: signedPdfBase64,
+          signed_pdf_base64: signedPdfBase64,
+          signed_file_name: signedFileName
+        })
+        .eq("id", requestId);
 
-    showSuccessState();
+      if (updateError) throw updateError;
+
+      showTenantSuccessState();
+
+    } else {
+      const { error: updateError } = await supabaseClient
+        .from("signing_requests")
+        .update({
+          status: "completed",
+          owner_signed_at: new Date().toISOString(),
+          owner_signed_pdf_base64: signedPdfBase64,
+          final_pdf_base64: signedPdfBase64,
+          signed_pdf_base64: signedPdfBase64,
+          signed_file_name: signedFileName
+        })
+        .eq("id", requestId);
+
+      if (updateError) throw updateError;
+
+      showOwnerSuccessState();
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
 
   } catch (err) {
@@ -543,5 +736,6 @@ async function submitSignature() {
 
 loadAgreement();
 </script>
+
 </body>
 </html>
