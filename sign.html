@@ -7,8 +7,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 
   <style>
+    @font-face {
+      font-family: "AmerikaSignature";
+      src: url("AmerikaSignature.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+
     :root {
       --primary: #2b56ff;
       --primary-hover: #1e3bb3;
@@ -30,7 +38,7 @@
 
     .top-nav {
       background: #ffffff;
-      height: 64px;
+      min-height: 64px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -39,6 +47,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      box-sizing: border-box;
     }
 
     .logo {
@@ -55,6 +64,14 @@
       height: 20px;
       background: var(--primary);
       border-radius: 4px;
+    }
+
+    .step-indicator {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-align: right;
     }
 
     .wrapper {
@@ -93,12 +110,38 @@
       margin-bottom: 24px;
       min-height: 300px;
       position: relative;
-      overflow: hidden;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .pdf-mobile-fallback {
       padding: 40px 20px;
       text-align: center;
+    }
+
+    .pdf-pages {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      align-items: center;
+      box-sizing: border-box;
+    }
+
+    .pdf-page-wrapper {
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      border-radius: 6px;
+      overflow: hidden;
+      width: 100%;
+      max-width: 850px;
+    }
+
+    .pdf-page-wrapper canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      touch-action: auto;
     }
 
     .input-label {
@@ -124,6 +167,27 @@
       margin-bottom: 20px;
     }
 
+    .signature-option-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      color: #475569;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .signature-option-row input {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
     .confirmation-box {
       background: #f8fafc;
       border: 1px solid var(--border);
@@ -141,14 +205,53 @@
       flex-shrink: 0;
     }
 
-    .signature-wrapper {
+    .signature-wrapper,
+    .typed-signature-preview,
+    .owner-signature-preview {
       background: #fffdf5;
       border: 2px dashed #cbd5e0;
       border-radius: 8px;
+      min-height: 200px;
+      box-sizing: border-box;
+    }
+
+    .signature-wrapper {
       touch-action: none;
     }
 
-    canvas {
+    .typed-signature-preview {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    .typed-signature-text {
+      font-family: "AmerikaSignature", "Brush Script MT", "Segoe Script", cursive;
+      font-size: 64px;
+      line-height: 1;
+      color: #000;
+      text-align: center;
+      word-break: break-word;
+      width: 100%;
+    }
+
+    .owner-signature-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .owner-signature-preview img {
+      max-width: 320px;
+      width: 80%;
+      max-height: 150px;
+      object-fit: contain;
+    }
+
+    #canvas {
       display: block;
       width: 100%;
       height: 200px;
@@ -202,9 +305,36 @@
     }
 
     @media (max-width: 640px) {
-      .top-nav { padding: 0 15px; }
-      .card-body { padding: 15px; }
-      .top-nav .step-indicator { display: none; }
+      .top-nav {
+        padding: 12px 15px;
+        gap: 12px;
+      }
+
+      .card-body {
+        padding: 15px;
+      }
+
+      .top-nav .step-indicator {
+        display: none;
+      }
+
+      .owner-signature-preview img {
+        width: 95%;
+      }
+
+      .typed-signature-text {
+        font-size: 48px;
+      }
+
+      .wrapper {
+        margin: 12px auto;
+        padding: 0 10px;
+      }
+
+      .pdf-pages {
+        padding: 8px;
+        gap: 12px;
+      }
     }
   </style>
 </head>
@@ -235,14 +365,28 @@
         <label class="input-label">Full Name <span class="required-mark">*</span></label>
         <input id="signerName" type="text" placeholder="Your legal name">
 
-        <label class="input-label">Your Signature <span class="required-mark">*</span></label>
-        <div class="signature-wrapper">
+        <label class="input-label" id="signatureLabel">Your Signature <span class="required-mark">*</span></label>
+
+        <label class="signature-option-row" id="typedSignatureToggleRow" for="useTypedSignature">
+          <input type="checkbox" id="useTypedSignature" onchange="toggleTypedSignature()">
+          <span>Use typed signature font</span>
+        </label>
+
+        <div class="typed-signature-preview" id="typedSignaturePreview">
+          <div class="typed-signature-text" id="typedSignatureText">Your Signature</div>
+        </div>
+
+        <div class="signature-wrapper" id="tenantSignatureBox">
           <canvas id="canvas"></canvas>
         </div>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0 25px 0;">
-          <span style="font-size: 0.75rem; color: var(--text-muted);">Sign with finger, mouse, or stylus</span>
-          <button class="btn btn-secondary" onclick="clearCanvas()">Clear</button>
+        <div class="owner-signature-preview" id="ownerSignatureBox" style="display:none;">
+          <img src="sign.png" alt="Owner Signature">
+        </div>
+
+        <div id="signatureHelpRow" style="display: flex; justify-content: space-between; align-items: center; margin: 10px 0 25px 0;">
+          <span id="signatureHelpText" style="font-size: 0.75rem; color: var(--text-muted);">Sign with finger, mouse, or stylus</span>
+          <button class="btn btn-secondary" id="clearSignatureBtn" onclick="clearCanvas()">Clear</button>
         </div>
 
         <label class="confirmation-box" for="confirmTerms">
@@ -263,9 +407,12 @@
 <script>
 const SUPABASE_URL = "https://ynpiihwwzhcnfszpaaya.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlucGlpaHd3emhjbmZzenBhYXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1ODUxMDgsImV4cCI6MjA5MzE2MTEwOH0.rrUY2kMV6j3ftLjsVKlsUDJMVsyqMwzzo7_PiVBr5UY";
+const OWNER_SIGNATURE_IMAGE = "sign.png";
+const TYPED_SIGNATURE_FONT = "AmerikaSignature";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 const token = new URLSearchParams(window.location.search).get("token");
 
 let requestId = null;
@@ -286,6 +433,58 @@ function resizeCanvas() {
 
 window.addEventListener("resize", resizeCanvas);
 setTimeout(resizeCanvas, 100);
+
+function updateTypedSignaturePreview() {
+  const name = document.getElementById("signerName").value.trim();
+  document.getElementById("typedSignatureText").innerText = name || "Your Signature";
+}
+
+function toggleTypedSignature() {
+  if (signerRole === "owner") return;
+
+  const useTyped = document.getElementById("useTypedSignature").checked;
+  const typedBox = document.getElementById("typedSignaturePreview");
+  const drawBox = document.getElementById("tenantSignatureBox");
+  const clearBtn = document.getElementById("clearSignatureBtn");
+  const helpText = document.getElementById("signatureHelpText");
+
+  updateTypedSignaturePreview();
+
+  if (useTyped) {
+    typedBox.style.display = "flex";
+    drawBox.style.display = "none";
+    clearBtn.style.display = "none";
+    helpText.innerText = "Typed signature will be applied using the name entered above.";
+    isCanvasEmpty = false;
+  } else {
+    typedBox.style.display = "none";
+    drawBox.style.display = "block";
+    clearBtn.style.display = "inline-block";
+    helpText.innerText = "Sign with finger, mouse, or stylus";
+    clearCanvas();
+  }
+}
+
+function setOwnerSignatureMode() {
+  document.getElementById("signatureLabel").innerHTML = "Owner Signature <span class='required-mark'>*</span>";
+  document.getElementById("typedSignatureToggleRow").style.display = "none";
+  document.getElementById("typedSignaturePreview").style.display = "none";
+  document.getElementById("tenantSignatureBox").style.display = "none";
+  document.getElementById("ownerSignatureBox").style.display = "flex";
+  document.getElementById("signatureHelpText").innerText = "Owner signature image will be applied automatically.";
+  document.getElementById("clearSignatureBtn").style.display = "none";
+}
+
+function setTenantSignatureMode() {
+  document.getElementById("signatureLabel").innerHTML = "Your Signature <span class='required-mark'>*</span>";
+  document.getElementById("typedSignatureToggleRow").style.display = "flex";
+  document.getElementById("ownerSignatureBox").style.display = "none";
+  document.getElementById("useTypedSignature").checked = false;
+  document.getElementById("typedSignaturePreview").style.display = "none";
+  document.getElementById("tenantSignatureBox").style.display = "block";
+  document.getElementById("signatureHelpText").innerText = "Sign with finger, mouse, or stylus";
+  document.getElementById("clearSignatureBtn").style.display = "inline-block";
+}
 
 async function loadAgreement() {
   const box = document.getElementById("pdfContainer");
@@ -334,10 +533,13 @@ async function loadAgreement() {
     document.getElementById("agreement-title").innerText = "Tenant Review & Sign";
     document.getElementById("stepIndicator").innerText = "TENANT SIGNATURE REQUIRED";
     document.getElementById("signerName").value = data.tenant_name || "";
+    updateTypedSignaturePreview();
+    setTenantSignatureMode();
   } else {
     document.getElementById("agreement-title").innerText = "Owner Review & Sign";
     document.getElementById("stepIndicator").innerText = "OWNER SIGNATURE REQUIRED";
     document.getElementById("signerName").value = data.owner_name || "";
+    setOwnerSignatureMode();
   }
 
   let pdfBase64 = "";
@@ -348,21 +550,59 @@ async function loadAgreement() {
     pdfBase64 = data.agreement_pdf_base64;
   }
 
-  const pdfData = `data:application/pdf;base64,${pdfBase64}`;
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  await renderPdfInline(pdfBase64);
+}
 
-  if (isMobile) {
+async function renderPdfInline(pdfBase64) {
+  const box = document.getElementById("pdfContainer");
+
+  box.innerHTML = `
+    <div id="pdfPages" class="pdf-pages">
+      <div style="padding: 20px; color: var(--text-muted); text-align:center;">Loading agreement...</div>
+    </div>
+  `;
+
+  const pdfPages = document.getElementById("pdfPages");
+
+  try {
+    const pdfBytes = base64ToUint8Array(pdfBase64);
+    const pdf = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
+
+    pdfPages.innerHTML = "";
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const containerWidth = Math.min(box.clientWidth - 30, 850);
+      const unscaledViewport = page.getViewport({ scale: 1 });
+      const scale = containerWidth / unscaledViewport.width;
+      const viewport = page.getViewport({ scale });
+
+      const pageWrapper = document.createElement("div");
+      pageWrapper.className = "pdf-page-wrapper";
+
+      const pageCanvas = document.createElement("canvas");
+      const context = pageCanvas.getContext("2d");
+
+      pageCanvas.width = Math.floor(viewport.width);
+      pageCanvas.height = Math.floor(viewport.height);
+      pageCanvas.style.width = "100%";
+      pageCanvas.style.height = "auto";
+
+      pageWrapper.appendChild(pageCanvas);
+      pdfPages.appendChild(pageWrapper);
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+    }
+  } catch (err) {
     box.innerHTML = `
       <div class="pdf-mobile-fallback">
-        <p style="margin-bottom: 15px;">Document ready for review.</p>
-        <a href="${pdfData}" target="_blank" style="display:inline-block; padding: 12px 20px; background: #edf2f7; color: var(--primary); text-decoration: none; border-radius: 6px; font-weight: 600;">
-          Open PDF to Review
-        </a>
-        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 15px;">Review the document above, then sign below.</p>
+        <p style="color: var(--error); font-weight: 700;">Unable to load the agreement preview.</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">${err.message}</p>
       </div>
     `;
-  } else {
-    box.innerHTML = `<embed src="${pdfData}" width="100%" height="500px" type="application/pdf" />`;
   }
 }
 
@@ -380,6 +620,8 @@ function getPos(e) {
 }
 
 function start(e) {
+  if (signerRole === "owner") return;
+
   drawing = true;
   isCanvasEmpty = false;
 
@@ -394,7 +636,7 @@ function start(e) {
 }
 
 function move(e) {
-  if (!drawing) return;
+  if (!drawing || signerRole === "owner") return;
 
   const pos = getPos(e);
   ctx.lineTo(pos.x, pos.y);
@@ -413,6 +655,8 @@ window.addEventListener("mousemove", move);
 window.addEventListener("touchmove", move, { passive: false });
 window.addEventListener("mouseup", stop);
 window.addEventListener("touchend", stop);
+
+document.getElementById("signerName").addEventListener("input", updateTypedSignaturePreview);
 
 function clearCanvas() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -502,116 +746,139 @@ function getInitialsFromName(fullName) {
   return `${first}.${last}.`.toUpperCase();
 }
 
-async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName, role) {
+function drawCenteredText(page, text, centerX, y, size) {
+  const approximateWidth = String(text).length * size * 0.5;
+  page.drawText(String(text), {
+    x: centerX - approximateWidth / 2,
+    y,
+    size
+  });
+}
+
+function drawCenteredImage(page, image, centerX, y, width, height) {
+  page.drawImage(image, {
+    x: centerX - width / 2,
+    y,
+    width,
+    height
+  });
+}
+
+async function waitForTypedFont() {
+  if (document.fonts && document.fonts.load) {
+    try {
+      await document.fonts.load(`76px ${TYPED_SIGNATURE_FONT}`);
+      await document.fonts.ready;
+    } catch (err) {
+      console.warn("Typed signature font could not be fully loaded. Browser fallback will be used.", err);
+    }
+  }
+}
+
+async function createTypedSignatureImage(signerName) {
+  await waitForTypedFont();
+
+  const typedCanvas = document.createElement("canvas");
+  typedCanvas.width = 900;
+  typedCanvas.height = 260;
+
+  const typedCtx = typedCanvas.getContext("2d");
+  typedCtx.clearRect(0, 0, typedCanvas.width, typedCanvas.height);
+  typedCtx.fillStyle = "#000";
+  typedCtx.textAlign = "center";
+  typedCtx.textBaseline = "middle";
+  typedCtx.font = `96px ${TYPED_SIGNATURE_FONT}, Brush Script MT, Segoe Script, cursive`;
+  typedCtx.fillText(signerName, typedCanvas.width / 2, typedCanvas.height / 2 + 10);
+
+  const blob = await new Promise(resolve => typedCanvas.toBlob(resolve, "image/png"));
+  const bytes = await fetch(typedCanvas.toDataURL("image/png")).then(res => res.arrayBuffer());
+
+  return { bytes, blob };
+}
+
+async function getSignatureData(role) {
+  if (role === "owner") {
+    const imageResponse = await fetch(OWNER_SIGNATURE_IMAGE);
+    if (!imageResponse.ok) {
+      throw new Error("Owner signature image not found. Make sure sign.png is in the same folder as sign.html.");
+    }
+
+    const ownerSignatureBytes = await imageResponse.arrayBuffer();
+    return {
+      bytes: ownerSignatureBytes,
+      blob: new Blob([ownerSignatureBytes], { type: "image/png" })
+    };
+  }
+
+  const useTypedSignature = document.getElementById("useTypedSignature").checked;
+  const signerName = document.getElementById("signerName").value.trim();
+
+  if (useTypedSignature) {
+    return await createTypedSignatureImage(signerName);
+  }
+
+  const signatureDataUrl = canvas.toDataURL("image/png");
+  const tenantBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+  const tenantBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
+
+  return {
+    bytes: tenantBytes,
+    blob: tenantBlob
+  };
+}
+
+async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
   const pages = pdfDoc.getPages();
   const initials = getInitialsFromName(signerName);
   const signedDate = new Date().toLocaleDateString();
-
-  const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
-  const signatureImage = await pdfDoc.embedPng(pngImageBytes);
+  const signatureImage = await pdfDoc.embedPng(signatureBytes);
 
   if (role === "tenant") {
-    // PAGE 1 — Tenant initials/signature area
     if (pages[0]) {
       const page = pages[0];
+      const tenantInitialCenterX = 522;
 
-      page.drawText(initials, {
-        x: 508,
-        y: 60,
-        size: 9
-      });
-
-      page.drawText("Digitally Signed", {
-        x: 512,
-        y: 68,
-        size: 7
-      });
+      drawCenteredText(page, initials, tenantInitialCenterX, 60, 9);
+      drawCenteredText(page, "Digitally Signed", tenantInitialCenterX, 68, 7);
     }
 
-    // PAGE 2 — Tenant signature above tenant name line
     if (pages[1]) {
       const page = pages[1];
+      const tenantCenterX = 410;
 
-      page.drawImage(signatureImage, {
-        x: 358,
-        y: 132,
-        width: 105,
-        height: 42
-      });
-
-      page.drawText("Digitally Signed", {
-        x: 390,
-        y: 103,
-        size: 8
-      });
-
-      page.drawText(signedDate, {
-        x: 394,
-        y: 87,
-        size: 8
-      });
+      drawCenteredImage(page, signatureImage, tenantCenterX, 132, 105, 42);
+      drawCenteredText(page, "Digitally Signed", tenantCenterX, 103, 8);
+      drawCenteredText(page, signedDate, tenantCenterX, 87, 8);
     }
 
-    // PAGE 3 — Declaration tenant signature
     const lastPage = pages[pages.length - 1];
 
     if (lastPage) {
-      lastPage.drawText(initials, {
-        x: 140,
-        y: 310,
-        size: 9
-      });
+      const tenantDeclarationCenterX = 145;
 
-      lastPage.drawText("Digitally Signed", {
-        x: 124,
-        y: 298,
-        size: 8
-      });
+      drawCenteredText(lastPage, initials, tenantDeclarationCenterX, 310, 9);
+      drawCenteredText(lastPage, "Digitally Signed", tenantDeclarationCenterX, 298, 8);
     }
 
   } else {
-    // OWNER SIGNATURE — Page 2 owner signature line
     if (pages[1]) {
       const page = pages[1];
+      const ownerCenterX = 134;
 
-      page.drawImage(signatureImage, {
-        x: 82,
-        y: 132,
-        width: 105,
-        height: 42
-      });
-
-      page.drawText("Digitally Signed", {
-        x: 112,
-        y: 103,
-        size: 8
-      });
-
-      page.drawText(signedDate, {
-        x: 116,
-        y: 87,
-        size: 8
-      });
+      drawCenteredImage(page, signatureImage, ownerCenterX, 126, 125, 55);
+      drawCenteredText(page, "Digitally Signed", ownerCenterX, 103, 8);
+      drawCenteredText(page, signedDate, ownerCenterX, 87, 8);
     }
 
-    // Optional owner initials on Page 1
     if (pages[0]) {
       const page = pages[0];
+      const ownerInitialCenterX = 160;
 
-      page.drawText(initials, {
-        x: 160,
-        y: 60,
-        size: 9
-      });
-
-      page.drawText("Digitally Signed", {
-        x: 140,
-        y: 68,
-        size: 7
-      });
+      drawCenteredText(page, initials, ownerInitialCenterX, 60, 9);
+      drawCenteredText(page, "Digitally Signed", ownerInitialCenterX, 68, 7);
     }
   }
 
@@ -622,10 +889,18 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
+  const useTypedSignature = document.getElementById("useTypedSignature")?.checked || false;
 
-  if (!name || isCanvasEmpty || !checked) {
-    alert("Please fill in your name, sign the document, and check the confirmation box.");
-    return;
+  if (signerRole === "tenant") {
+    if (!name || (!useTypedSignature && isCanvasEmpty) || !checked) {
+      alert("Please fill in your name, provide a signature, and check the confirmation box.");
+      return;
+    }
+  } else {
+    if (!name || !checked) {
+      alert("Please fill in the owner name and check the confirmation box.");
+      return;
+    }
   }
 
   const btn = document.getElementById("submitBtn");
@@ -643,14 +918,12 @@ async function submitSignature() {
       throw new Error("Could not reload agreement data.");
     }
 
-    const signatureDataUrl = canvas.toDataURL("image/png");
-
-    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    const signatureData = await getSignatureData(signerRole);
     const signaturePath = `${requestId}_${signerRole}_${Date.now()}.png`;
 
     const { error: upErr } = await supabaseClient.storage
       .from("signatures")
-      .upload(signaturePath, blob, {
+      .upload(signaturePath, signatureData.blob, {
         upsert: true,
         contentType: "image/png"
       });
@@ -681,7 +954,7 @@ async function submitSignature() {
 
     const signedPdfBase64 = await createSignedPdfBase64(
       sourcePdfBase64,
-      signatureDataUrl,
+      signatureData.bytes,
       name,
       signerRole
     );
@@ -704,7 +977,6 @@ async function submitSignature() {
         .eq("id", requestId);
 
       if (updateError) throw updateError;
-
       showTenantSuccessState();
 
     } else {
@@ -721,7 +993,6 @@ async function submitSignature() {
         .eq("id", requestId);
 
       if (updateError) throw updateError;
-
       showOwnerSuccessState();
     }
 
