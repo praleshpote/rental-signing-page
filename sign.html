@@ -966,6 +966,26 @@ function drawCenteredImageByWidth(page, image, centerX, y, targetWidth) {
   });
 }
 
+function drawSignatureAutoFit(page, image, centerX, lineY, maxWidth, maxHeight, gapAboveLine = 8) {
+  const originalWidth = image.width;
+  const originalHeight = image.height;
+
+  const widthScale = maxWidth / originalWidth;
+  const heightScale = maxHeight / originalHeight;
+  const scale = Math.min(widthScale, heightScale);
+
+  const finalWidth = originalWidth * scale;
+  const finalHeight = originalHeight * scale;
+  const yPosition = lineY + gapAboveLine;
+
+  page.drawImage(image, {
+    x: centerX - finalWidth / 2,
+    y: yPosition,
+    width: finalWidth,
+    height: finalHeight
+  });
+}
+
 async function waitForTypedFont() {
   if (!document.fonts || !document.fonts.load) return false;
 
@@ -1160,7 +1180,10 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
       const page = pages[1];
       const tenantCenterX = 410;
 
-      drawCenteredImageByWidth(page, signatureImage, tenantCenterX, 130, 190);
+      // Tenant signature: auto-fits above tenant signature line.
+      // Long typed names scale down automatically and never stretch.
+      const tenantLineY = 120;
+      drawSignatureAutoFit(page, signatureImage, tenantCenterX, tenantLineY, 260, 72, 8);
       drawCenteredText(page, "Digitally Signed", tenantCenterX, 103, 8);
       drawCenteredText(page, signedDate, tenantCenterX, 87, 8);
     }
@@ -1179,7 +1202,10 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
       const page = pages[1];
       const ownerCenterX = 134;
 
-      drawCenteredImageByWidth(page, signatureImage, ownerCenterX, 132, 155);
+      // Owner signature: auto-fits below the IN WITNESS paragraph and above owner signature line.
+      // Keeps original ratio and prevents stretching/overflow.
+      const ownerLineY = 120;
+      drawSignatureAutoFit(page, signatureImage, ownerCenterX, ownerLineY, 200, 72, 8);
       drawCenteredText(page, "Digitally Signed", ownerCenterX, 103, 8);
       drawCenteredText(page, signedDate, ownerCenterX, 87, 8);
     }
