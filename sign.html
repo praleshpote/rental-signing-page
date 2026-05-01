@@ -473,6 +473,13 @@ let totalPdfPages = 0;
 let pdfZoomScale = 1;
 let pinchStartDistance = 0;
 let pinchStartScale = 1;
+let pdfPanX = 0;
+let pdfPanY = 0;
+let panStartX = 0;
+let panStartY = 0;
+let panStartTranslateX = 0;
+let panStartTranslateY = 0;
+let isPdfPanning = false;
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -708,22 +715,40 @@ function setupPdfPinchZoom(wrapper, canvasEl) {
   pdfZoomScale = 1;
   pinchStartDistance = 0;
   pinchStartScale = 1;
+  pdfPanX = 0;
+  pdfPanY = 0;
+  isPdfPanning = false;
+
+  function applyTransform() {
+    canvasEl.style.transform = `translate(${pdfPanX}px, ${pdfPanY}px) scale(${pdfZoomScale})`;
+  }
 
   function applyZoom(scale) {
     pdfZoomScale = Math.max(1, Math.min(scale, 4));
-    canvasEl.style.transform = `scale(${pdfZoomScale})`;
 
     if (pdfZoomScale === 1) {
-      canvasEl.style.width = "100%";
-      wrapper.scrollLeft = 0;
-      wrapper.scrollTop = 0;
+      pdfPanX = 0;
+      pdfPanY = 0;
     }
+
+    applyTransform();
   }
 
   wrapper.addEventListener("touchstart", function (e) {
     if (e.touches.length === 2) {
       pinchStartDistance = getTouchDistance(e.touches);
       pinchStartScale = pdfZoomScale;
+      isPdfPanning = false;
+      e.preventDefault();
+      return;
+    }
+
+    if (e.touches.length === 1 && pdfZoomScale > 1) {
+      isPdfPanning = true;
+      panStartX = e.touches[0].clientX;
+      panStartY = e.touches[0].clientY;
+      panStartTranslateX = pdfPanX;
+      panStartTranslateY = pdfPanY;
       e.preventDefault();
     }
   }, { passive: false });
@@ -734,6 +759,18 @@ function setupPdfPinchZoom(wrapper, canvasEl) {
       const nextScale = pinchStartScale * (currentDistance / pinchStartDistance);
       applyZoom(nextScale);
       e.preventDefault();
+      return;
+    }
+
+    if (e.touches.length === 1 && isPdfPanning && pdfZoomScale > 1) {
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+
+      pdfPanX = panStartTranslateX + (currentX - panStartX);
+      pdfPanY = panStartTranslateY + (currentY - panStartY);
+
+      applyTransform();
+      e.preventDefault();
     }
   }, { passive: false });
 
@@ -742,10 +779,17 @@ function setupPdfPinchZoom(wrapper, canvasEl) {
       pinchStartDistance = 0;
       pinchStartScale = pdfZoomScale;
     }
+
+    if (e.touches.length === 0) {
+      isPdfPanning = false;
+    }
   }, { passive: false });
 
   wrapper.addEventListener("dblclick", function () {
-    applyZoom(1);
+    pdfZoomScale = 1;
+    pdfPanX = 0;
+    pdfPanY = 0;
+    applyTransform();
   });
 }
 
