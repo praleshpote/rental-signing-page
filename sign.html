@@ -462,11 +462,6 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
       y: 298,
       size: 8
     });
-        page.drawText(signedDate, {
-      x: 124,
-      y: 304,
-      size: 8
-    });
   }
 
   const signedBytes = await pdfDoc.save();
