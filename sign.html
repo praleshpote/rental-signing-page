@@ -417,7 +417,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     });
 
     page.drawText("Digitally Signed", {
-      x: 522,
+      x: 412,
       y: 68,
       size: 7
     });
@@ -435,7 +435,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     });
 
     page.drawText("Digitally Signed", {
-      x: 413,
+      x: 394,
       y: 103,
       size: 8
     });
@@ -443,7 +443,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     page.drawText(signedDate, {
       x: 394,
       y: 87,
-      size: 9
+      size: 8
     });
   }
 
@@ -460,7 +460,12 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     lastPage.drawText("Digitally Signed", {
       x: 124,
       y: 298,
-      size: 7
+      size: 8
+    });
+        page.drawText(signedDate, {
+      x: 124,
+      y: 304,
+      size: 8
     });
   }
 
