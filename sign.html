@@ -381,122 +381,133 @@ function uint8ArrayToBase64(bytes) {
 
   return btoa(binary);
 }
+  function getInitialsFromName(fullName) {
+  const parts = String(fullName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) return "";
+
+  const first = parts[0][0] || "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+
+  return `${first}.${last}.`.toUpperCase();
+}
 
 async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
   const pages = pdfDoc.getPages();
-  const lastPage = pages[pages.length - 1];
+  const initials = getInitialsFromName(signerName);
+  const signedText = "Digitally Signed";
+  const dateText = new Date().toLocaleDateString();
 
   const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
   const signatureImage = await pdfDoc.embedPng(pngImageBytes);
 
-  const pageWidth = lastPage.getWidth();
-
-  const signatureWidth = 180;
-  const signatureHeight = 60;
-
-  const x = pageWidth - signatureWidth - 70;
-  const y = 95;
-
-  lastPage.drawText("Digitally Signed By:", {
-    x,
-    y: y + 82,
-    size: 9
-  });
-
-  lastPage.drawImage(signatureImage, {
-    x,
-    y: y + 18,
-    width: signatureWidth,
-    height: signatureHeight
-  });
-
-  lastPage.drawText(signerName, {
-    x,
-    y,
-    size: 10
-  });
-
-  lastPage.drawText("Signed At: " + new Date().toLocaleString(), {
-    x,
-    y: y - 14,
-    size: 8
-  });
-
-  const signedBytes = await pdfDoc.save();
-  return uint8ArrayToBase64(signedBytes);
-}
-
-  async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signerName) {
-  const pdfBytes = base64ToUint8Array(originalPdfBase64);
-  const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-
-  const pages = pdfDoc.getPages();
-
-  const pngImageBytes = await fetch(signatureDataUrl).then(res => res.arrayBuffer());
-  const signatureImage = await pdfDoc.embedPng(pngImageBytes);
-
-  // ---------- PAGE 1: Tenant Initials ----------
+  // =========================
+  // PAGE 1: Tenant Signature line
+  // =========================
   if (pages[0]) {
     const page = pages[0];
     const w = page.getWidth();
 
+    const x = w / 2 + 95;
+    const y = 58;
+
+    page.drawText(initials, {
+      x,
+      y: y + 30,
+      size: 9
+    });
+
     page.drawImage(signatureImage, {
-      x: w / 2 + 40,
-      y: 45,
+      x,
+      y,
       width: 90,
-      height: 32
+      height: 30
+    });
+
+    page.drawText(signedText, {
+      x,
+      y: y - 10,
+      size: 7
     });
   }
 
-  // ---------- PAGE 2: Tenant Signature ----------
+  // =========================
+  // PAGE 2: Tenant main signature block
+  // =========================
   if (pages[1]) {
     const page = pages[1];
     const w = page.getWidth();
 
-    const x = w - 245;
+    const x = w - 250;
+    const y = 168;
+
+    page.drawText(initials, {
+      x,
+      y: y + 62,
+      size: 9
+    });
 
     page.drawImage(signatureImage, {
       x,
-      y: 180,
+      y,
       width: 170,
       height: 55
     });
 
     page.drawText(signerName, {
       x,
-      y: 165,
+      y: y - 13,
       size: 9
     });
 
-    page.drawText("Signed: " + new Date().toLocaleDateString(), {
+    page.drawText(`${signedText} • ${dateText}`, {
       x,
-      y: 152,
+      y: y - 26,
       size: 8
     });
   }
 
-  // ---------- LAST PAGE (Declaration): Tenant Initials ----------
+  // =========================
+  // DECLARATION PAGE: Tenant Signature line
+  // =========================
   const lastIndex = pages.length - 1;
 
   if (pages[lastIndex]) {
     const page = pages[lastIndex];
     const w = page.getWidth();
 
+    const x = 160;
+    const y = 88;
+
+    page.drawText(initials, {
+      x,
+      y: y + 30,
+      size: 9
+    });
+
     page.drawImage(signatureImage, {
-      x: w / 2 + 40,
-      y: 60,
-      width: 90,
-      height: 32
+      x,
+      y,
+      width: 100,
+      height: 34
+    });
+
+    page.drawText(signedText, {
+      x,
+      y: y - 10,
+      size: 7
     });
   }
 
   const signedBytes = await pdfDoc.save();
   return uint8ArrayToBase64(signedBytes);
 }
-  
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
