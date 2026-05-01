@@ -411,13 +411,13 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     const page = pages[0];
 
     page.drawText(initials, {
-      x: 512,
+      x: 508,
       y: 60,
       size: 9
     });
 
     page.drawText("Digitally Signed", {
-      x: 412,
+      x: 512,
       y: 68,
       size: 7
     });
@@ -435,7 +435,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureDataUrl, signer
     });
 
     page.drawText("Digitally Signed", {
-      x: 394,
+      x: 390,
       y: 103,
       size: 8
     });
