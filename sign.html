@@ -1178,12 +1178,15 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
 
     if (pages[1]) {
       const page = pages[1];
-      const tenantCenterX = 410;
+      const tenantCenterX = 412;
 
       // Tenant signature: auto-fits above tenant signature line.
       // Long typed names scale down automatically and never stretch.
-      const tenantLineY = 120;
-      drawSignatureAutoFit(page, signatureImage, tenantCenterX, tenantLineY, 260, 72, 8);
+      // Exact fit for uploaded PDF page 2:
+      // signature line is around y=147 in pdf-lib coordinates.
+      // final sentence ends around y=178, so signature must fit in that narrow space.
+      const tenantLineY = 147;
+      drawSignatureAutoFit(page, signatureImage, tenantCenterX, tenantLineY, 170, 24, 4);
       drawCenteredText(page, "Digitally Signed", tenantCenterX, 103, 8);
       drawCenteredText(page, signedDate, tenantCenterX, 87, 8);
     }
@@ -1200,12 +1203,15 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
   } else {
     if (pages[1]) {
       const page = pages[1];
-      const ownerCenterX = 134;
+      const ownerCenterX = 117;
 
       // Owner signature: auto-fits below the IN WITNESS paragraph and above owner signature line.
       // Keeps original ratio and prevents stretching/overflow.
-      const ownerLineY = 120;
-      drawSignatureAutoFit(page, signatureImage, ownerCenterX, ownerLineY, 200, 72, 8);
+      // Exact fit for uploaded PDF page 2:
+      // signature line is around y=147 in pdf-lib coordinates.
+      // final sentence ends around y=178, so signature must fit in that narrow space.
+      const ownerLineY = 147;
+      drawSignatureAutoFit(page, signatureImage, ownerCenterX, ownerLineY, 150, 24, 4);
       drawCenteredText(page, "Digitally Signed", ownerCenterX, 103, 8);
       drawCenteredText(page, signedDate, ownerCenterX, 87, 8);
     }
