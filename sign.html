@@ -674,6 +674,7 @@ async function renderPdfPage(pageNum) {
   pageCanvas.style.height = `${Math.floor(viewport.height)}px`;
   pageCanvas.style.maxWidth = "100%";
   pageCanvas.style.height = "auto";
+  
   setupPdfPinchZoom(pageWrapper, pageCanvas);
 
   pageWrapper.appendChild(pageCanvas);
@@ -1246,10 +1247,10 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
 if (pages[0]) {
   const page = pages[0];
 
-  const OWNER_X = 178;
-  const TENANT_X = 530;
+  const OWNER_X = 143;
+  const TENANT_X = 534;
 
-  const LINE_Y = 68; // 👈 adjusted to match your PDF line
+  const LINE_Y = 40; // 👈 adjusted to match your PDF line
 
   if (role === "owner") {
     centerText(page, initials, OWNER_X, LINE_Y + 6, 9); // above line
