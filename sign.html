@@ -1163,78 +1163,75 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     });
   }
 
-const BOXES = {
-  // PAGE 1 INITIAL SLOTS
-  page1OwnerInitial: { page: 0, x: 115, y: 84, width: 75, height: 18 },
-  page1OwnerDigital: { page: 0, x: 105, y: 69, width: 95, height: 14 },
+  const BOXES = {
+    page1OwnerInitial: { page: 0, x: 115, y: 84, width: 75, height: 18 },
+    page1OwnerDigital: { page: 0, x: 105, y: 69, width: 95, height: 14 },
 
-  page1TenantInitial: { page: 0, x: 465, y: 84, width: 75, height: 18 },
-  page1TenantDigital: { page: 0, x: 455, y: 69, width: 95, height: 14 },
+    page1TenantInitial: { page: 0, x: 465, y: 84, width: 75, height: 18 },
+    page1TenantDigital: { page: 0, x: 455, y: 69, width: 95, height: 14 },
 
-  // PAGE 2 INITIAL SLOTS
-  page2OwnerInitial: { page: 1, x: 115, y: 72, width: 75, height: 18 },
-  page2OwnerDigital: { page: 1, x: 105, y: 57, width: 95, height: 14 },
+    page2OwnerInitial: { page: 1, x: 115, y: 72, width: 75, height: 18 },
+    page2OwnerDigital: { page: 1, x: 105, y: 57, width: 95, height: 14 },
 
-  page2TenantInitial: { page: 1, x: 465, y: 72, width: 75, height: 18 },
-  page2TenantDigital: { page: 1, x: 455, y: 57, width: 95, height: 14 },
+    page2TenantInitial: { page: 1, x: 465, y: 72, width: 75, height: 18 },
+    page2TenantDigital: { page: 1, x: 455, y: 57, width: 95, height: 14 },
 
-  // PAGE 3 MAIN SIGNATURES
-  ownerMainSignature: { page: 2, x: 43, y: 455, width: 190, height: 42 },
-  ownerDate: { page: 2, x: 43, y: 397, width: 160, height: 18 },
-  ownerDigital: { page: 2, x: 43, y: 381, width: 160, height: 16 },
+    ownerMainSignature: { page: 2, x: 43, y: 455, width: 190, height: 42 },
+    ownerDate: { page: 2, x: 43, y: 397, width: 160, height: 18 },
+    ownerDigital: { page: 2, x: 43, y: 381, width: 160, height: 16 },
 
-  tenantMainSignature: { page: 2, x: 338, y: 455, width: 190, height: 42 },
-  tenantDate: { page: 2, x: 338, y: 397, width: 160, height: 18 },
-  tenantDigital: { page: 2, x: 338, y: 381, width: 160, height: 16 },
+    tenantMainSignature: { page: 2, x: 338, y: 455, width: 190, height: 42 },
+    tenantDate: { page: 2, x: 338, y: 397, width: 160, height: 18 },
+    tenantDigital: { page: 2, x: 338, y: 381, width: 160, height: 16 },
 
-  // PAGE 4 DECLARATION
-  declarationTenantInitial: { page: 3, x: 130, y: 307, width: 110, height: 24 },
-  declarationTenantDigital: { page: 3, x: 130, y: 290, width: 110, height: 14 }
-};
+    declarationTenantInitial: { page: 3, x: 130, y: 307, width: 110, height: 24 },
+    declarationTenantDigital: { page: 3, x: 130, y: 290, width: 110, height: 14 }
+  };
 
-function drawInitialAndDigital(initialBox, digitalBox) {
-  const initialPage = pages[initialBox.page];
-  if (!initialPage) return;
+  function drawInitialAndDigital(initialBox, digitalBox) {
+    const initialPage = pages[initialBox.page];
+    if (!initialPage) return;
 
-  centerText(initialPage, initials, initialBox, 9);
+    centerText(initialPage, initials, initialBox, 9);
 
-  if (digitalBox) {
-    const digitalPage = pages[digitalBox.page];
-    if (digitalPage) {
-      centerText(digitalPage, "Digitally Signed", digitalBox, 7);
+    if (digitalBox) {
+      const digitalPage = pages[digitalBox.page];
+      if (digitalPage) {
+        centerText(digitalPage, "Digitally Signed", digitalBox, 7);
+      }
     }
   }
-}
 
-if (role === "owner") {
-  drawInitialAndDigital(BOXES.page1OwnerInitial, BOXES.page1OwnerDigital);
-  drawInitialAndDigital(BOXES.page2OwnerInitial, BOXES.page2OwnerDigital);
+  if (role === "owner") {
+    drawInitialAndDigital(BOXES.page1OwnerInitial, BOXES.page1OwnerDigital);
+    drawInitialAndDigital(BOXES.page2OwnerInitial, BOXES.page2OwnerDigital);
 
-  if (pages[2]) {
-    drawSignatureInsideBox(pages[2], signatureImage, BOXES.ownerMainSignature);
-    centerText(pages[2], signedDate, BOXES.ownerDate, 8);
-    centerText(pages[2], "Digitally Signed", BOXES.ownerDigital, 8);
-  }
-}
-
-if (role === "tenant") {
-  drawInitialAndDigital(BOXES.page1TenantInitial, BOXES.page1TenantDigital);
-  drawInitialAndDigital(BOXES.page2TenantInitial, BOXES.page2TenantDigital);
-
-  if (pages[2]) {
-    drawSignatureInsideBox(pages[2], signatureImage, BOXES.tenantMainSignature);
-    centerText(pages[2], signedDate, BOXES.tenantDate, 8);
-    centerText(pages[2], "Digitally Signed", BOXES.tenantDigital, 8);
+    if (pages[2]) {
+      drawSignatureInsideBox(pages[2], signatureImage, BOXES.ownerMainSignature);
+      centerText(pages[2], signedDate, BOXES.ownerDate, 8);
+      centerText(pages[2], "Digitally Signed", BOXES.ownerDigital, 8);
+    }
   }
 
-  if (pages[3]) {
-    centerText(pages[3], initials, BOXES.declarationTenantInitial, 9);
-    centerText(pages[3], "Digitally Signed", BOXES.declarationTenantDigital, 8);
-  }
-}
+  if (role === "tenant") {
+    drawInitialAndDigital(BOXES.page1TenantInitial, BOXES.page1TenantDigital);
+    drawInitialAndDigital(BOXES.page2TenantInitial, BOXES.page2TenantDigital);
 
-const signedBytes = await pdfDoc.save();
-return uint8ArrayToBase64(signedBytes);
+    if (pages[2]) {
+      drawSignatureInsideBox(pages[2], signatureImage, BOXES.tenantMainSignature);
+      centerText(pages[2], signedDate, BOXES.tenantDate, 8);
+      centerText(pages[2], "Digitally Signed", BOXES.tenantDigital, 8);
+    }
+
+    if (pages[3]) {
+      centerText(pages[3], initials, BOXES.declarationTenantInitial, 9);
+      centerText(pages[3], "Digitally Signed", BOXES.declarationTenantDigital, 8);
+    }
+  }
+
+  const signedBytes = await pdfDoc.save();
+  return uint8ArrayToBase64(signedBytes);
+}
 
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
@@ -1309,10 +1306,9 @@ async function submitSignature() {
       signerRole
     );
 
-    const signedFileName =
-      requestData.agreement_file_name
-        ? "signed_" + requestData.agreement_file_name
-        : "signed_agreement.pdf";
+    const signedFileName = requestData.agreement_file_name
+      ? "signed_" + requestData.agreement_file_name
+      : "signed_agreement.pdf";
 
     if (signerRole === "tenant") {
       const { error: updateError } = await supabaseClient
@@ -1328,7 +1324,6 @@ async function submitSignature() {
 
       if (updateError) throw updateError;
       showTenantSuccessState();
-
     } else {
       const { error: updateError } = await supabaseClient
         .from("signing_requests")
