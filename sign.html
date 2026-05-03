@@ -1243,12 +1243,11 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
   const DECLARATION_DIGITAL_Y = 174;
 
   // PAGE 1 initials
-// PAGE 1 initials (FIXED)
 if (pages[0]) {
   const page = pages[0];
 
-  const OWNER_X = 185;
-  const TENANT_X = 520;
+  const OWNER_X = 178;
+  const TENANT_X = 530;
 
   const LINE_Y = 75; // 👈 adjusted to match your PDF line
 
