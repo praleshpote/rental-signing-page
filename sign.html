@@ -1243,17 +1243,25 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
   const DECLARATION_DIGITAL_Y = 174;
 
   // PAGE 1 initials
-  if (pages[0]) {
-    if (role === "owner") {
-      centerText(pages[0], initials, OWNER_INITIAL_X, PAGE_FOOTER_LINE_Y, 9);
-      centerText(pages[0], "Digitally Signed", OWNER_INITIAL_X, PAGE_FOOTER_DIGITAL_Y, 7);
-    }
+// PAGE 1 initials (FIXED)
+if (pages[0]) {
+  const page = pages[0];
 
-    if (role === "tenant") {
-      centerText(pages[0], initials, TENANT_INITIAL_X, PAGE_FOOTER_LINE_Y, 9);
-      centerText(pages[0], "Digitally Signed", TENANT_INITIAL_X, PAGE_FOOTER_DIGITAL_Y, 7);
-    }
+  const OWNER_X = 185;
+  const TENANT_X = 430;
+
+  const LINE_Y = 82; // 👈 adjusted to match your PDF line
+
+  if (role === "owner") {
+    centerText(page, initials, OWNER_X, LINE_Y + 6, 9); // above line
+    centerText(page, "Digitally Signed", OWNER_X, LINE_Y - 12, 7); // below line
   }
+
+  if (role === "tenant") {
+    centerText(page, initials, TENANT_X, LINE_Y + 6, 9);
+    centerText(page, "Digitally Signed", TENANT_X, LINE_Y - 12, 7);
+  }
+}
 
   // PAGE 2 initials
   if (pages[1]) {
