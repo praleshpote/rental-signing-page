@@ -1205,93 +1205,115 @@ function findTextItemOnPage(textItems, pageIndex, searchText) {
     item.text.toLowerCase().includes(searchText.toLowerCase())
   );
 }
+  
+// ✅ helper function (place here — top or bottom of file)
+function drawSignatureAutoFit(page, image, centerX, y, maxWidth, maxHeight) {
+  const imgWidth = image.width;
+  const imgHeight = image.height;
 
+  const scale = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+
+  const width = imgWidth * scale;
+  const height = imgHeight * scale;
+
+  page.drawImage(image, {
+    x: centerX - width / 2,
+    y,
+    width,
+    height
+  });
+}
 async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
   const pages = pdfDoc.getPages();
   const initials = getInitialsFromName(signerName);
   const signedDate = new Date().toLocaleDateString("en-US");
   const signatureImage = await pdfDoc.embedPng(signatureBytes);
   const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
 
-  // --- DEBUG TOOL ---
-  const isDebug = new URLSearchParams(window.location.search).get("debug") === "true";
-  function drawGrid(page) {
-    const { width, height } = page.getSize();
-    for (let i = 0; i <= width; i += 50) {
-      page.drawLine({ start: { x: i, y: 0 }, end: { x: i, y: height }, color: PDFLib.rgb(1, 0, 0), thickness: 0.5 });
-      page.drawText(String(i), { x: i + 2, y: 10, size: 8, color: PDFLib.rgb(1, 0, 0) });
-    }
-    for (let i = 0; i <= height; i += 50) {
-      page.drawLine({ start: { x: 0, y: i }, end: { x: width, y: i }, color: PDFLib.rgb(0, 0, 1), thickness: 0.5 });
-      page.drawText(String(i), { x: 10, y: i + 2, size: 8, color: PDFLib.rgb(0, 0, 1) });
-    }
-  }
-
   function centerText(page, text, centerX, y, size) {
     const width = font.widthOfTextAtSize(String(text), size);
-    page.drawText(String(text), { x: centerX - width / 2, y, size, font });
+    page.drawText(String(text), {
+      x: centerX - width / 2,
+      y,
+      size,
+      font
+    });
   }
 
-  // Adjusted positions based on your A4 layout (595 x 842)
-  const OWNER_INITIAL_X = 185;
-  const TENANT_INITIAL_X = 430;
-  const FOOTER_LINE_Y = 54;
-  const FOOTER_TEXT_Y = 40;
+// PAGE 1 + PAGE 2 footer initials/signatures
+const OWNER_FOOTER_X = 150;
+const TENANT_FOOTER_X = 520;
+const FOOTER_INITIAL_Y = 63;
+const FOOTER_DIGITAL_Y = 48;
 
-  const FINAL_SIG_X = 140;
-  const OWNER_SIG_Y = 266;
-  const TENANT_SIG_Y = 184;
+// PAGE 3 final signature page
+const OWNER_FINAL_X = 150;
+const TENANT_FINAL_X = 150;
 
-  pages.forEach((page, index) => {
-    if (isDebug) drawGrid(page); // 👈 This will show you exactly where to point!
+const OWNER_SIGNATURE_Y = 282;
+const OWNER_DATE_Y = 229;
 
-    // PAGE 1 Initials
-    if (index === 0) {
-      const OWNER_X = 143;
-      const TENANT_X = 534;
-      const LINE_Y = 48; // Adjusted slightly up from 45
-      if (role === "owner") {
-        centerText(page, initials, OWNER_X, LINE_Y + 5, 9);
-        centerText(page, "Digitally Signed", OWNER_X, LINE_Y - 10, 7);
-      } else {
-        centerText(page, initials, TENANT_X, LINE_Y + 5, 9);
-        centerText(page, "Digitally Signed", TENANT_X, LINE_Y - 10, 7);
-      }
-    }
+const TENANT_SIGNATURE_Y = 197;
+const TENANT_DATE_Y = 144;
 
-    // PAGE 2 Initials (Middle of footer)
-    if (index === 1) {
-      const targetX = (role === "owner") ? OWNER_INITIAL_X : TENANT_INITIAL_X;
-      centerText(page, initials, targetX, FOOTER_LINE_Y + 2, 9);
-      centerText(page, "Digitally Signed", targetX, FOOTER_TEXT_Y, 7);
-    }
+// PAGE 4 declaration tenant signature
+const DECLARATION_TENANT_X = 165;
+const DECLARATION_INITIAL_Y = 376;
+const DECLARATION_DIGITAL_Y = 361;
 
-    // PAGE 3 Final Signature
-    if (index === 2) {
-      const sigY = (role === "owner") ? OWNER_SIG_Y : TENANT_SIG_Y;
-      const dateY = (role === "owner") ? 212 : 130;
-      
-      // Draw actual signature image
-      drawSignatureAutoFit(page, signatureImage, FINAL_SIG_X, sigY + 2, 160, 32);
-      
-      // Draw Date and Digital Stamp
-      centerText(page, signedDate, FINAL_SIG_X, dateY, 8);
-      centerText(page, "Digitally Signed", FINAL_SIG_X, dateY - 12, 7);
-    }
+// PAGE 1 initials
+if (pages[0]) {
+  if (role === "owner") {
+    centerText(pages[0], initials, OWNER_FOOTER_X, FOOTER_INITIAL_Y, 9);
+    centerText(pages[0], "Digitally Signed", OWNER_FOOTER_X, FOOTER_DIGITAL_Y, 7);
+  }
 
-    // PAGE 4 Declaration (Tenant only)
-    if (index === 3 && role === "tenant") {
-      centerText(page, initials, 178, 189, 9);
-      centerText(page, "Digitally Signed", 178, 174, 8);
-    }
-  });
-
-  const signedBytes = await pdfDoc.save();
-  return uint8ArrayToBase64(signedBytes);
+  if (role === "tenant") {
+    centerText(pages[0], initials, TENANT_FOOTER_X, FOOTER_INITIAL_Y, 9);
+    centerText(pages[0], "Digitally Signed", TENANT_FOOTER_X, FOOTER_DIGITAL_Y, 7);
+  }
 }
 
+// PAGE 2 initials
+if (pages[1]) {
+  if (role === "owner") {
+    centerText(pages[1], initials, OWNER_FOOTER_X, FOOTER_INITIAL_Y, 9);
+    centerText(pages[1], "Digitally Signed", OWNER_FOOTER_X, FOOTER_DIGITAL_Y, 7);
+  }
+
+  if (role === "tenant") {
+    centerText(pages[1], initials, TENANT_FOOTER_X, FOOTER_INITIAL_Y, 9);
+    centerText(pages[1], "Digitally Signed", TENANT_FOOTER_X, FOOTER_DIGITAL_Y, 7);
+  }
+}
+
+// PAGE 3 real signatures + dates
+if (pages[2]) {
+  const page = pages[2];
+
+  if (role === "owner") {
+    drawSignatureAutoFit(page, signatureImage, OWNER_FINAL_X, OWNER_SIGNATURE_Y, 165, 34);
+
+    centerText(page, signedDate, OWNER_FINAL_X, OWNER_DATE_Y, 8);
+    centerText(page, "Digitally Signed", OWNER_FINAL_X, OWNER_DATE_Y - 14, 8);
+  }
+
+  if (role === "tenant") {
+    drawSignatureAutoFit(page, signatureImage, TENANT_FINAL_X, TENANT_SIGNATURE_Y, 165, 34);
+
+    centerText(page, signedDate, TENANT_FINAL_X, TENANT_DATE_Y, 8);
+    centerText(page, "Digitally Signed", TENANT_FINAL_X, TENANT_DATE_Y - 14, 8);
+  }
+}
+
+// PAGE 4 tenant declaration signature
+if (role === "tenant" && pages[3]) {
+  centerText(pages[3], initials, DECLARATION_TENANT_X, DECLARATION_INITIAL_Y, 9);
+  centerText(pages[3], "Digitally Signed", DECLARATION_TENANT_X, DECLARATION_DIGITAL_Y, 8);
+}
   
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
