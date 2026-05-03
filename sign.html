@@ -1160,77 +1160,135 @@ async function getSignatureData(role) {
   };
 }
 
+async function findPdfTextPositions(pdfBase64) {
+  const pdfBytes = base64ToUint8Array(pdfBase64);
+  const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+  const pdf = await loadingTask.promise;
+
+  const results = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1 });
+    const textContent = await page.getTextContent();
+
+    textContent.items.forEach(item => {
+      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+
+      results.push({
+        pageIndex: pageNum - 1,
+        text: item.str.trim(),
+        x: tx[4],
+        y: tx[5],
+        width: item.width || 0,
+        height: item.height || 0,
+        pageHeight: viewport.height
+      });
+    });
+  }
+
+  return results;
+}
+
+function findPageIndexByText(textItems, searchText) {
+  const found = textItems.find(item =>
+    item.text.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  return found ? found.pageIndex : -1;
+}
+
+function findTextItemOnPage(textItems, pageIndex, searchText) {
+  return textItems.find(item =>
+    item.pageIndex === pageIndex &&
+    item.text.toLowerCase().includes(searchText.toLowerCase())
+  );
+}
+
 async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
   const pages = pdfDoc.getPages();
   const initials = getInitialsFromName(signerName);
-  const signedDate = new Date().toLocaleDateString();
+  const signedDate = new Date().toLocaleDateString("en-US");
   const signatureImage = await pdfDoc.embedPng(signatureBytes);
 
+  const textItems = await findPdfTextPositions(originalPdfBase64);
+
+  // PAGE 1 - footer initials
+  if (pages[0]) {
+    if (role === "tenant") {
+      drawCenteredText(pages[0], initials, 522, 60, 9);
+      drawCenteredText(pages[0], "Digitally Signed", 522, 48, 7);
+    } else {
+      drawCenteredText(pages[0], initials, 160, 60, 9);
+      drawCenteredText(pages[0], "Digitally Signed", 160, 48, 7);
+    }
+  }
+
+  // PAGE 2 - footer confirmation
+  if (pages[1]) {
+    if (role === "tenant") {
+      drawCenteredText(pages[1], "Digitally Signed", 522, 60, 8);
+      drawCenteredText(pages[1], signedDate, 522, 47, 8);
+    } else {
+      drawCenteredText(pages[1], "Digitally Signed", 160, 60, 8);
+      drawCenteredText(pages[1], signedDate, 160, 47, 8);
+    }
+  }
+
+  // DYNAMIC FINAL SIGNATURE PAGE
+  let witnessPageIndex = findPageIndexByText(textItems, "IN WITNESS WHEREOF");
+
+  if (witnessPageIndex < 0) {
+    witnessPageIndex = Math.min(2, pages.length - 1);
+  }
+
+  const finalSigPage = pages[witnessPageIndex];
+
+  if (finalSigPage) {
+    const ownerText = findTextItemOnPage(textItems, witnessPageIndex, "Owner");
+    const tenantText = findTextItemOnPage(textItems, witnessPageIndex, "Tenant");
+
+    if (role === "owner") {
+      const ownerCenterX = ownerText ? ownerText.x + 35 : 154;
+      const ownerLineY = ownerText ? ownerText.y + 28 : 247;
+
+      drawSignatureAutoFit(finalSigPage, signatureImage, ownerCenterX, ownerLineY, 170, 38);
+      drawCenteredText(finalSigPage, "Digitally Signed", ownerCenterX, ownerLineY - 23, 8);
+      drawCenteredText(finalSigPage, signedDate, ownerCenterX, ownerLineY - 40, 8);
+    }
+
+    if (role === "tenant") {
+      const tenantCenterX = tenantText ? tenantText.x + 35 : 154;
+      const tenantLineY = tenantText ? tenantText.y + 28 : 174;
+
+      drawSignatureAutoFit(finalSigPage, signatureImage, tenantCenterX, tenantLineY, 170, 38);
+      drawCenteredText(finalSigPage, "Digitally Signed", tenantCenterX, tenantLineY - 23, 8);
+      drawCenteredText(finalSigPage, signedDate, tenantCenterX, tenantLineY - 40, 8);
+    }
+  }
+
+  // DYNAMIC DECLARATION PAGE - tenant only
   if (role === "tenant") {
-    if (pages[0]) {
-      const page = pages[0];
-      const tenantInitialCenterX = 522;
+    const declarationPageIndex = findPageIndexByText(textItems, "Tenant Signature");
 
-      drawCenteredText(page, initials, tenantInitialCenterX, 60, 9);
-      drawCenteredText(page, "Digitally Signed", tenantInitialCenterX, 68, 7);
-    }
+    if (declarationPageIndex >= 0 && pages[declarationPageIndex]) {
+      const declarationPage = pages[declarationPageIndex];
+      const tenantSigText = findTextItemOnPage(textItems, declarationPageIndex, "Tenant Signature");
 
-    if (pages[1]) {
-      const page = pages[1];
-      const tenantCenterX = 412;
+      const centerX = tenantSigText ? tenantSigText.x + 110 : 145;
+      const y = tenantSigText ? tenantSigText.y + 5 : 180;
 
-      // Tenant signature: auto-fits above tenant signature line.
-      // Long typed names scale down automatically and never stretch.
-      // Exact fit for uploaded PDF page 2:
-      // signature line is around y=147 in pdf-lib coordinates.
-      // final sentence ends around y=178, so signature must fit in that narrow space.
-      const tenantLineY = 147;
-      drawSignatureAutoFit(page, signatureImage, tenantCenterX, tenantLineY, 170, 24, 4);
-      drawCenteredText(page, "Digitally Signed", tenantCenterX, 103, 8);
-      drawCenteredText(page, signedDate, tenantCenterX, 87, 8);
-    }
-
-    const lastPage = pages[pages.length - 1];
-
-    if (lastPage) {
-      const tenantDeclarationCenterX = 145;
-
-      drawCenteredText(lastPage, initials, tenantDeclarationCenterX, 310, 9);
-      drawCenteredText(lastPage, "Digitally Signed", tenantDeclarationCenterX, 298, 8);
-    }
-
-  } else {
-    if (pages[1]) {
-      const page = pages[1];
-      const ownerCenterX = 117;
-
-      // Owner signature: auto-fits below the IN WITNESS paragraph and above owner signature line.
-      // Keeps original ratio and prevents stretching/overflow.
-      // Exact fit for uploaded PDF page 2:
-      // signature line is around y=147 in pdf-lib coordinates.
-      // final sentence ends around y=178, so signature must fit in that narrow space.
-      const ownerLineY = 147;
-      drawSignatureAutoFit(page, signatureImage, ownerCenterX, ownerLineY, 150, 24, 4);
-      drawCenteredText(page, "Digitally Signed", ownerCenterX, 103, 8);
-      drawCenteredText(page, signedDate, ownerCenterX, 87, 8);
-    }
-
-    if (pages[0]) {
-      const page = pages[0];
-      const ownerInitialCenterX = 160;
-
-      drawCenteredText(page, initials, ownerInitialCenterX, 60, 9);
-      drawCenteredText(page, "Digitally Signed", ownerInitialCenterX, 68, 7);
+      drawCenteredText(declarationPage, initials, centerX, y + 12, 9);
+      drawCenteredText(declarationPage, "Digitally Signed", centerX, y, 8);
     }
   }
 
   const signedBytes = await pdfDoc.save();
   return uint8ArrayToBase64(signedBytes);
 }
-
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
