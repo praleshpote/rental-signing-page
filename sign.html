@@ -550,68 +550,94 @@ function setTenantSignatureMode() {
 async function loadAgreement() {
   const box = document.getElementById("pdfContainer");
 
-  if (!token) {
-    box.innerHTML = "<div class='pdf-mobile-fallback'>Missing signing token.</div>";
-    return;
-  }
+  try {
+    if (!window.supabase) throw new Error("Supabase script did not load.");
+    if (!window.pdfjsLib) throw new Error("PDF.js script did not load.");
+    if (!token) throw new Error("Missing signing token in URL.");
 
-  const { data, error } = await supabaseClient
-    .from("signing_requests")
-    .select("*")
-    .or(`token.eq.${token},owner_token.eq.${token}`)
-    .maybeSingle();
+    box.innerHTML = "<div class='pdf-mobile-fallback'>Loading agreement data...</div>";
 
-  if (error || !data) {
-    box.innerHTML = "<div class='pdf-mobile-fallback'>Error loading document.</div>";
-    return;
-  }
+    let { data, error } = await supabaseClient
+      .from("signing_requests")
+      .select("*")
+      .eq("token", token)
+      .maybeSingle();
 
-  requestDataGlobal = data;
-  requestId = data.id;
+    if (error) throw error;
 
-  if (data.owner_token && token === data.owner_token) {
-    signerRole = "owner";
-  } else {
     signerRole = "tenant";
+
+    if (!data) {
+      const ownerResult = await supabaseClient
+        .from("signing_requests")
+        .select("*")
+        .eq("owner_token", token)
+        .maybeSingle();
+
+      if (ownerResult.error) throw ownerResult.error;
+
+      data = ownerResult.data;
+      signerRole = "owner";
+    }
+
+    if (!data) {
+      throw new Error("No agreement found for this signing link.");
+    }
+
+    requestDataGlobal = data;
+    requestId = data.id;
+
+    if (data.status === "completed") {
+      showAlreadyCompletedState();
+      return;
+    }
+
+    if (signerRole === "tenant" && data.status !== "tenant_pending") {
+      showAlreadySignedState("Tenant signature has already been completed. Waiting for owner signature.");
+      return;
+    }
+
+    if (signerRole === "owner" && data.status !== "owner_pending") {
+      showAlreadySignedState("Owner signature is not available yet.");
+      return;
+    }
+
+    if (signerRole === "tenant") {
+      document.getElementById("agreement-title").innerText = "Tenant Review & Sign";
+      document.getElementById("stepIndicator").innerText = "TENANT SIGNATURE REQUIRED";
+      document.getElementById("signerName").value = data.tenant_name || "";
+      updateTypedSignaturePreview();
+      setTenantSignatureMode();
+    } else {
+      document.getElementById("agreement-title").innerText = "Owner Review & Sign";
+      document.getElementById("stepIndicator").innerText = "OWNER SIGNATURE REQUIRED";
+      document.getElementById("signerName").value = data.owner_name || "";
+      setOwnerSignatureMode();
+    }
+
+    let pdfBase64 = "";
+
+    if (signerRole === "owner") {
+      pdfBase64 = data.tenant_signed_pdf_base64 || data.signed_pdf_base64 || data.agreement_pdf_base64;
+    } else {
+      pdfBase64 = data.agreement_pdf_base64;
+    }
+
+    if (!pdfBase64) {
+      throw new Error("Agreement PDF is missing from Supabase.");
+    }
+
+    await renderPdfInline(pdfBase64);
+
+  } catch (err) {
+    console.error("loadAgreement error:", err);
+    box.innerHTML = `
+      <div class="pdf-mobile-fallback">
+        <p style="color: var(--error); font-weight:700;">Unable to load agreement.</p>
+        <p style="font-size:0.85rem; color:var(--text-muted);">${err.message}</p>
+      </div>
+    `;
   }
-
-  if (data.status === "completed") {
-    showAlreadyCompletedState();
-    return;
-  }
-
-  if (signerRole === "tenant" && data.status !== "tenant_pending") {
-    showAlreadySignedState("Tenant signature has already been completed. Waiting for owner signature.");
-    return;
-  }
-
-  if (signerRole === "owner" && data.status !== "owner_pending") {
-    showAlreadySignedState("Owner signature is not available yet.");
-    return;
-  }
-
-  if (signerRole === "tenant") {
-    document.getElementById("agreement-title").innerText = "Tenant Review & Sign";
-    document.getElementById("stepIndicator").innerText = "TENANT SIGNATURE REQUIRED";
-    document.getElementById("signerName").value = data.tenant_name || "";
-    updateTypedSignaturePreview();
-    setTenantSignatureMode();
-  } else {
-    document.getElementById("agreement-title").innerText = "Owner Review & Sign";
-    document.getElementById("stepIndicator").innerText = "OWNER SIGNATURE REQUIRED";
-    document.getElementById("signerName").value = data.owner_name || "";
-    setOwnerSignatureMode();
-  }
-
-  let pdfBase64 = "";
-
-  if (signerRole === "owner") {
-    pdfBase64 = data.tenant_signed_pdf_base64 || data.signed_pdf_base64 || data.agreement_pdf_base64;
-  } else {
-    pdfBase64 = data.agreement_pdf_base64;
-  }
-
-  await renderPdfInline(pdfBase64);
 }
 
 async function renderPdfInline(pdfBase64) {
@@ -673,8 +699,7 @@ async function renderPdfPage(pageNum) {
   pageCanvas.style.width = `${Math.floor(viewport.width)}px`;
   pageCanvas.style.height = `${Math.floor(viewport.height)}px`;
   pageCanvas.style.maxWidth = "100%";
-  pageCanvas.style.height = "auto";
-  
+
   setupPdfPinchZoom(pageWrapper, pageCanvas);
 
   pageWrapper.appendChild(pageCanvas);
@@ -764,12 +789,8 @@ function setupPdfPinchZoom(wrapper, canvasEl) {
     }
 
     if (e.touches.length === 1 && isPdfPanning && pdfZoomScale > 1) {
-      const currentX = e.touches[0].clientX;
-      const currentY = e.touches[0].clientY;
-
-      pdfPanX = panStartTranslateX + (currentX - panStartX);
-      pdfPanY = panStartTranslateY + (currentY - panStartY);
-
+      pdfPanX = panStartTranslateX + (e.touches[0].clientX - panStartX);
+      pdfPanY = panStartTranslateY + (e.touches[0].clientY - panStartY);
       applyTransform();
       e.preventDefault();
     }
@@ -869,7 +890,7 @@ function showOwnerSuccessState() {
       <div class="status-icon">✓</div>
       <h2>Agreement Fully Signed</h2>
       <p style="color: var(--text-muted); line-height: 1.5; max-width: 460px; margin: 0 auto;">
-        The agreement has now been signed by both parties. A final copy may be sent to both owner and tenant.
+        The agreement has now been signed by both parties.
         <br><br>You may close this window safely.
       </p>
     </div>`;
@@ -898,7 +919,8 @@ function showAlreadySignedState(message) {
 }
 
 function base64ToUint8Array(base64) {
-  const binary = atob(base64);
+  const cleanBase64 = String(base64 || "").replace(/^data:application\/pdf;base64,/, "");
+  const binary = atob(cleanBase64);
   const bytes = new Uint8Array(binary.length);
 
   for (let i = 0; i < binary.length; i++) {
@@ -934,56 +956,19 @@ function getInitialsFromName(fullName) {
   return `${first}.${last}.`.toUpperCase();
 }
 
-function drawCenteredText(page, text, centerX, y, size) {
-  const approximateWidth = String(text).length * size * 0.5;
-  page.drawText(String(text), {
-    x: centerX - approximateWidth / 2,
-    y,
-    size
-  });
-}
+function drawSignatureAutoFit(page, image, centerX, y, maxWidth, maxHeight) {
+  const imgWidth = image.width;
+  const imgHeight = image.height;
 
-function drawCenteredImage(page, image, centerX, y, width, height) {
+  const scale = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
+  const width = imgWidth * scale;
+  const height = imgHeight * scale;
+
   page.drawImage(image, {
     x: centerX - width / 2,
     y,
     width,
     height
-  });
-}
-
-function drawCenteredImageByWidth(page, image, centerX, y, targetWidth) {
-  const originalWidth = image.width;
-  const originalHeight = image.height;
-  const scale = targetWidth / originalWidth;
-  const finalWidth = originalWidth * scale;
-  const finalHeight = originalHeight * scale;
-
-  page.drawImage(image, {
-    x: centerX - finalWidth / 2,
-    y,
-    width: finalWidth,
-    height: finalHeight
-  });
-}
-
-function drawSignatureAutoFit(page, image, centerX, lineY, maxWidth, maxHeight) {
-  const originalWidth = image.width;
-  const originalHeight = image.height;
-
-  const widthScale = maxWidth / originalWidth;
-  const heightScale = maxHeight / originalHeight;
-  const scale = Math.min(widthScale, heightScale);
-
-  const finalWidth = originalWidth * scale;
-  const finalHeight = originalHeight * scale;
-  const yPosition = lineY;
-
-  page.drawImage(image, {
-    x: centerX - finalWidth / 2,
-    y: yPosition,
-    width: finalWidth,
-    height: finalHeight
   });
 }
 
@@ -993,14 +978,7 @@ async function waitForTypedFont() {
   try {
     await document.fonts.load(`96px ${TYPED_SIGNATURE_FONT}`);
     await document.fonts.ready;
-
-    const fontLoaded = document.fonts.check(`96px ${TYPED_SIGNATURE_FONT}`);
-
-    if (!fontLoaded) {
-      console.warn("AmerikaSignature.ttf did not load. Check file name, location, and package.json build files.");
-    }
-
-    return fontLoaded;
+    return document.fonts.check(`96px ${TYPED_SIGNATURE_FONT}`);
   } catch (err) {
     console.warn("Typed signature font could not be loaded.", err);
     return false;
@@ -1011,7 +989,7 @@ async function createTypedSignatureImage(signerName) {
   const fontLoaded = await waitForTypedFont();
 
   if (!fontLoaded) {
-    alert("Signature font file is not loading. Make sure AmerikaSignature.ttf is in the same folder as sign.html and included in package.json build files.");
+    alert("Signature font file is not loading. Make sure AmerikaSignature.ttf is in the same folder as sign.html.");
   }
 
   const typedCanvas = document.createElement("canvas");
@@ -1063,7 +1041,6 @@ async function cropSignatureImageBytes(inputBytes, padding = 22) {
           const b = data[i + 2];
           const a = data[i + 3];
 
-          // Detect black/dark signature ink on either transparent or white background.
           const isInk = a > 20 && (r + g + b) / 3 < 245;
 
           if (isInk) {
@@ -1078,7 +1055,7 @@ async function cropSignatureImageBytes(inputBytes, padding = 22) {
 
       if (!found) {
         URL.revokeObjectURL(url);
-        resolve(inputBytes);
+        resolve({ bytes: inputBytes, blob });
         return;
       }
 
@@ -1117,7 +1094,7 @@ async function cropSignatureImageBytes(inputBytes, padding = 22) {
 
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      resolve(inputBytes);
+      resolve({ bytes: inputBytes, blob });
     };
 
     img.src = url;
@@ -1127,17 +1104,13 @@ async function cropSignatureImageBytes(inputBytes, padding = 22) {
 async function getSignatureData(role) {
   if (role === "owner") {
     const imageResponse = await fetch(OWNER_SIGNATURE_IMAGE);
+
     if (!imageResponse.ok) {
       throw new Error("Owner signature image not found. Make sure sign.png is in the same folder as sign.html.");
     }
 
     const ownerSignatureBytes = await imageResponse.arrayBuffer();
-    const croppedOwnerSignature = await cropSignatureImageBytes(ownerSignatureBytes, 18);
-
-    return {
-      bytes: croppedOwnerSignature.bytes,
-      blob: croppedOwnerSignature.blob
-    };
+    return await cropSignatureImageBytes(ownerSignatureBytes, 18);
   }
 
   const useTypedSignature = document.getElementById("useTypedSignature").checked;
@@ -1159,68 +1132,6 @@ async function getSignatureData(role) {
   };
 }
 
-async function findPdfTextPositions(pdfBase64) {
-  const pdfBytes = base64ToUint8Array(pdfBase64);
-  const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
-  const pdf = await loadingTask.promise;
-
-  const results = [];
-
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1 });
-    const textContent = await page.getTextContent();
-
-    textContent.items.forEach(item => {
-      const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
-
-      results.push({
-        pageIndex: pageNum - 1,
-        text: item.str.trim(),
-        x: tx[4],
-        y: tx[5],
-        width: item.width || 0,
-        height: item.height || 0,
-        pageHeight: viewport.height
-      });
-    });
-  }
-
-  return results;
-}
-
-function findPageIndexByText(textItems, searchText) {
-  const found = textItems.find(item =>
-    item.text.toLowerCase().includes(searchText.toLowerCase())
-  );
-
-  return found ? found.pageIndex : -1;
-}
-
-function findTextItemOnPage(textItems, pageIndex, searchText) {
-  return textItems.find(item =>
-    item.pageIndex === pageIndex &&
-    item.text.toLowerCase().includes(searchText.toLowerCase())
-  );
-}
-  
-function drawSignatureAutoFit(page, image, centerX, y, maxWidth, maxHeight) {
-  const imgWidth = image.width;
-  const imgHeight = image.height;
-
-  const scale = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
-
-  const width = imgWidth * scale;
-  const height = imgHeight * scale;
-
-  page.drawImage(image, {
-    x: centerX - width / 2,
-    y,
-    width,
-    height
-  });
-}
-  
 async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
@@ -1233,6 +1144,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
 
   function centerText(page, text, centerX, y, size) {
     const width = font.widthOfTextAtSize(String(text), size);
+
     page.drawText(String(text), {
       x: centerX - width / 2,
       y,
@@ -1241,13 +1153,11 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     });
   }
 
-  // PAGE 1 + PAGE 2 footer initials
   const OWNER_FOOTER_X = 150;
   const TENANT_FOOTER_X = 520;
   const FOOTER_INITIAL_Y = 63;
   const FOOTER_DIGITAL_Y = 48;
 
-  // PAGE 3 final signatures
   const OWNER_FINAL_X = 150;
   const TENANT_FINAL_X = 150;
 
@@ -1257,12 +1167,10 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
   const TENANT_SIGNATURE_Y = 197;
   const TENANT_DATE_Y = 144;
 
-  // PAGE 4 tenant declaration
   const DECLARATION_TENANT_X = 165;
   const DECLARATION_INITIAL_Y = 376;
   const DECLARATION_DIGITAL_Y = 361;
 
-  // PAGE 1
   if (pages[0]) {
     if (role === "owner") {
       centerText(pages[0], initials, OWNER_FOOTER_X, FOOTER_INITIAL_Y, 9);
@@ -1275,7 +1183,6 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     }
   }
 
-  // PAGE 2
   if (pages[1]) {
     if (role === "owner") {
       centerText(pages[1], initials, OWNER_FOOTER_X, FOOTER_INITIAL_Y, 9);
@@ -1288,7 +1195,6 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     }
   }
 
-  // PAGE 3
   if (pages[2]) {
     const page = pages[2];
 
@@ -1305,7 +1211,6 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     }
   }
 
-  // PAGE 4
   if (role === "tenant" && pages[3]) {
     centerText(pages[3], initials, DECLARATION_TENANT_X, DECLARATION_INITIAL_Y, 9);
     centerText(pages[3], "Digitally Signed", DECLARATION_TENANT_X, DECLARATION_DIGITAL_Y, 8);
@@ -1314,7 +1219,7 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
   const signedBytes = await pdfDoc.save();
   return uint8ArrayToBase64(signedBytes);
 }
-  
+
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
   const checked = document.getElementById("confirmTerms").checked;
@@ -1434,7 +1339,7 @@ async function submitSignature() {
   }
 }
 
-loadAgreement();
+window.addEventListener("DOMContentLoaded", loadAgreement);
 </script>
 
 </body>
