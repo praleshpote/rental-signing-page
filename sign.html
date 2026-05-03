@@ -1250,11 +1250,11 @@ if (pages[0]) {
   const OWNER_X = 143;
   const TENANT_X = 534;
 
-  const LINE_Y = 40; // 👈 adjusted to match your PDF line
+  const LINE_Y = 32; // 👈 adjusted to match your PDF line
 
   if (role === "owner") {
     centerText(page, initials, OWNER_X, LINE_Y + 6, 9); // above line
-    centerText(page, "Digitally Signed", OWNER_X, LINE_Y - 12, 7); // below line
+    centerText(page, "Digitally Signed", OWNER_X, LINE_Y - 8, 7); // below line
   }
 
   if (role === "tenant") {
