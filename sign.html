@@ -1163,83 +1163,78 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     });
   }
 
-  const BOXES = {
-page1OwnerInitial: { page: 0, x: 145, y: 47, width: 95, height: 24 },
-page1TenantInitial: { page: 0, x: 500, y: 47, width: 95, height: 24 },
+const BOXES = {
+  // PAGE 1 INITIAL SLOTS
+  page1OwnerInitial: { page: 0, x: 115, y: 84, width: 75, height: 18 },
+  page1OwnerDigital: { page: 0, x: 105, y: 69, width: 95, height: 14 },
 
-page2OwnerInitial: { page: 1, x: 145, y: 47, width: 95, height: 24 },
-page2TenantInitial: { page: 1, x: 500, y: 47, width: 95, height: 24 },
+  page1TenantInitial: { page: 0, x: 465, y: 84, width: 75, height: 18 },
+  page1TenantDigital: { page: 0, x: 455, y: 69, width: 95, height: 14 },
 
-    ownerMainSignature: { page: 2, x: 65, y: 270, width: 175, height: 46 },
-    ownerDate: { page: 2, x: 65, y: 218, width: 175, height: 18 },
-    ownerDigital: { page: 2, x: 65, y: 202, width: 175, height: 16 },
+  // PAGE 2 INITIAL SLOTS
+  page2OwnerInitial: { page: 1, x: 115, y: 72, width: 75, height: 18 },
+  page2OwnerDigital: { page: 1, x: 105, y: 57, width: 95, height: 14 },
 
-    tenantMainSignature: { page: 2, x: 65, y: 185, width: 175, height: 46 },
-    tenantDate: { page: 2, x: 65, y: 133, width: 175, height: 18 },
-    tenantDigital: { page: 2, x: 65, y: 117, width: 175, height: 16 },
+  page2TenantInitial: { page: 1, x: 465, y: 72, width: 75, height: 18 },
+  page2TenantDigital: { page: 1, x: 455, y: 57, width: 95, height: 14 },
 
-    declarationTenantInitial: { page: 3, x: 95, y: 365, width: 140, height: 34 },
-    declarationTenantDigital: { page: 3, x: 95, y: 348, width: 140, height: 16 }
-  };
+  // PAGE 3 MAIN SIGNATURES
+  ownerMainSignature: { page: 2, x: 43, y: 455, width: 190, height: 42 },
+  ownerDate: { page: 2, x: 43, y: 397, width: 160, height: 18 },
+  ownerDigital: { page: 2, x: 43, y: 381, width: 160, height: 16 },
 
-  function drawInitialAndDigital(initialBox, digitalBox) {
-    const initialPage = pages[initialBox.page];
-    if (!initialPage) return;
+  tenantMainSignature: { page: 2, x: 338, y: 455, width: 190, height: 42 },
+  tenantDate: { page: 2, x: 338, y: 397, width: 160, height: 18 },
+  tenantDigital: { page: 2, x: 338, y: 381, width: 160, height: 16 },
 
-    centerText(initialPage, initials, initialBox, 9);
+  // PAGE 4 DECLARATION
+  declarationTenantInitial: { page: 3, x: 130, y: 307, width: 110, height: 24 },
+  declarationTenantDigital: { page: 3, x: 130, y: 290, width: 110, height: 14 }
+};
 
-    if (digitalBox) {
-      const digitalPage = pages[digitalBox.page];
-      if (digitalPage) {
-        centerText(digitalPage, "Digitally Signed", digitalBox, 7);
-      }
+function drawInitialAndDigital(initialBox, digitalBox) {
+  const initialPage = pages[initialBox.page];
+  if (!initialPage) return;
+
+  centerText(initialPage, initials, initialBox, 9);
+
+  if (digitalBox) {
+    const digitalPage = pages[digitalBox.page];
+    if (digitalPage) {
+      centerText(digitalPage, "Digitally Signed", digitalBox, 7);
     }
   }
-
-  if (role === "owner") {
-    drawInitialAndDigital(
-      BOXES.page1OwnerInitial,
-      { page: 0, x: 85, y: 30, width: 125, height: 14 }
-    );
-
-    drawInitialAndDigital(
-      BOXES.page2OwnerInitial,
-      { page: 1, x: 85, y: 30, width: 125, height: 14 }
-    );
-
-    if (pages[2]) {
-      drawSignatureInsideBox(pages[2], signatureImage, BOXES.ownerMainSignature);
-      centerText(pages[2], signedDate, BOXES.ownerDate, 8);
-      centerText(pages[2], "Digitally Signed", BOXES.ownerDigital, 8);
-    }
-  }
-
-  if (role === "tenant") {
-    drawInitialAndDigital(
-      BOXES.page1TenantInitial,
-      { page: 0, x: 455, y: 30, width: 125, height: 14 }
-    );
-
-    drawInitialAndDigital(
-      BOXES.page2TenantInitial,
-      { page: 1, x: 455, y: 30, width: 125, height: 14 }
-    );
-
-    if (pages[2]) {
-      drawSignatureInsideBox(pages[2], signatureImage, BOXES.tenantMainSignature);
-      centerText(pages[2], signedDate, BOXES.tenantDate, 8);
-      centerText(pages[2], "Digitally Signed", BOXES.tenantDigital, 8);
-    }
-
-    if (pages[3]) {
-      centerText(pages[3], initials, BOXES.declarationTenantInitial, 9);
-      centerText(pages[3], "Digitally Signed", BOXES.declarationTenantDigital, 8);
-    }
-  }
-
-  const signedBytes = await pdfDoc.save();
-  return uint8ArrayToBase64(signedBytes);
 }
+
+if (role === "owner") {
+  drawInitialAndDigital(BOXES.page1OwnerInitial, BOXES.page1OwnerDigital);
+  drawInitialAndDigital(BOXES.page2OwnerInitial, BOXES.page2OwnerDigital);
+
+  if (pages[2]) {
+    drawSignatureInsideBox(pages[2], signatureImage, BOXES.ownerMainSignature);
+    centerText(pages[2], signedDate, BOXES.ownerDate, 8);
+    centerText(pages[2], "Digitally Signed", BOXES.ownerDigital, 8);
+  }
+}
+
+if (role === "tenant") {
+  drawInitialAndDigital(BOXES.page1TenantInitial, BOXES.page1TenantDigital);
+  drawInitialAndDigital(BOXES.page2TenantInitial, BOXES.page2TenantDigital);
+
+  if (pages[2]) {
+    drawSignatureInsideBox(pages[2], signatureImage, BOXES.tenantMainSignature);
+    centerText(pages[2], signedDate, BOXES.tenantDate, 8);
+    centerText(pages[2], "Digitally Signed", BOXES.tenantDigital, 8);
+  }
+
+  if (pages[3]) {
+    centerText(pages[3], initials, BOXES.declarationTenantInitial, 9);
+    centerText(pages[3], "Digitally Signed", BOXES.declarationTenantDigital, 8);
+  }
+}
+
+const signedBytes = await pdfDoc.save();
+return uint8ArrayToBase64(signedBytes);
 
 async function submitSignature() {
   const name = document.getElementById("signerName").value.trim();
