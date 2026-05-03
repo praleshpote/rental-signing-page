@@ -1206,7 +1206,6 @@ function findTextItemOnPage(textItems, pageIndex, searchText) {
   );
 }
   
-// ✅ helper function (place here — top or bottom of file)
 function drawSignatureAutoFit(page, image, centerX, y, maxWidth, maxHeight) {
   const imgWidth = image.width;
   const imgHeight = image.height;
@@ -1223,6 +1222,7 @@ function drawSignatureAutoFit(page, image, centerX, y, maxWidth, maxHeight) {
     height
   });
 }
+  
 async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerName, role) {
   const pdfBytes = base64ToUint8Array(originalPdfBase64);
   const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
