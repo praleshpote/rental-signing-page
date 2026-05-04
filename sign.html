@@ -1178,9 +1178,9 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     ownerDate: { page: 2, x: 90, y: 440, width: 162, height: 18 }, 
     ownerDigital: { page: 2, x: 90, y: 420, width: 158, height: 16 },
 
-    tenantMainSignature: { page: 2, x: 360, y: 500, width: 180, height: 40 },
-    tenantDate: { page: 2, x: 360, y: 445, width: 160, height: 18 },
-    tenantDigital: { page: 2, x: 360, y: 430, width: 160, height: 14 },
+    tenantMainSignature: { page: 2, x: 360, y: 490, width: 180, height: 40 },
+    tenantDate: { page: 2, x: 360, y: 440, width: 160, height: 18 },
+    tenantDigital: { page: 2, x: 360, y: 420, width: 160, height: 14 },
 
 
     page4OwnerInitial: { page: 3, x: 115, y: 72, width: 75, height: 18 },
@@ -1189,19 +1189,21 @@ async function createSignedPdfBase64(originalPdfBase64, signatureBytes, signerNa
     page4TenantDigital: { page: 3, x: 455, y: 57, width: 95, height: 14 }
   };
 
-  function drawInitialAndDigital(initialBox, digitalBox) {
-    const initialPage = pages[initialBox.page];
-    if (!initialPage) return;
+function drawInitialAndDigital(initialBox, digitalBox) {
+  const initialPage = pages[initialBox.page];
+  if (!initialPage) return;
 
-    centerText(initialPage, initials, initialBox, 9);
+  const initialWithDate = `${initials} | ${signedDate}`;
 
-    if (digitalBox) {
-      const digitalPage = pages[digitalBox.page];
-      if (digitalPage) {
-        centerText(digitalPage, "Digitally Signed", digitalBox, 7);
-      }
+  centerText(initialPage, initialWithDate, initialBox, 8);
+
+  if (digitalBox) {
+    const digitalPage = pages[digitalBox.page];
+    if (digitalPage) {
+      centerText(digitalPage, "Digitally Signed", digitalBox, 7);
     }
   }
+}
 
   if (role === "owner") {
     drawInitialAndDigital(BOXES.page1OwnerInitial, BOXES.page1OwnerDigital);
