@@ -583,7 +583,15 @@ async function loadAgreement() {
     if (!data) {
       throw new Error("No agreement found for this signing link.");
     }
+if (signerRole === "tenant") {
+  if (data.used) {
+    throw new Error("This signing link has already been used.");
+  }
 
+  if (data.expires_at && new Date() > new Date(data.expires_at)) {
+    throw new Error("This signing link has expired. Please ask the owner to send a new link.");
+  }
+}
     requestDataGlobal = data;
     requestId = data.id;
 
@@ -1313,13 +1321,14 @@ async function submitSignature() {
     if (signerRole === "tenant") {
       const { error: updateError } = await supabaseClient
         .from("signing_requests")
-        .update({
-          status: "owner_pending",
-          tenant_signed_at: new Date().toISOString(),
-          tenant_signed_pdf_base64: signedPdfBase64,
-          signed_pdf_base64: signedPdfBase64,
-          signed_file_name: signedFileName
-        })
+.update({
+  status: "owner_pending",
+  used: true,
+  tenant_signed_at: new Date().toISOString(),
+  tenant_signed_pdf_base64: signedPdfBase64,
+  signed_pdf_base64: signedPdfBase64,
+  signed_file_name: signedFileName
+})
         .eq("id", requestId);
 
       if (updateError) throw updateError;
